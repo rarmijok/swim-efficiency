@@ -1,0 +1,7 @@
+# Extractors need NOTHING (Python stdlib only) — kept dependency-free on purpose.
+# These are only for the plan PDF and for local analysis/charts.
+weasyprint>=60
+pypdf>=4
+pandas>=2
+matplotlib>=3.7
+pdf2image>=1.17   # optional: only for rasterizing the PDF during dev

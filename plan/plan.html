@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @page{ size:A4; margin:16mm 15mm 14mm; }
+  :root{
+    --ink:#11283c; --ink2:#3a5266; --faint:#7d93a3; --hair:#d3dde4;
+    --rate:#c06a1f;   /* stroke rate — raise */
+    --len:#1d877d;    /* distance per stroke — hold */
+    --pace:#2f6aa3;
+    --paper:#ffffff; --tint:#f1f6f8; --tint2:#eef4f1;
+    --sans:"Helvetica Neue",Arial,sans-serif;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; font-family:var(--sans); color:var(--ink); font-size:10.3px; line-height:1.5}
+  h1,h2,h3{margin:0; font-weight:700; letter-spacing:-.01em}
+  .eyebrow{font-family:var(--mono); font-size:8.5px; letter-spacing:.3em; text-transform:uppercase; color:var(--len)}
+  /* cover header */
+  .cover{border-bottom:2px solid var(--ink); padding-bottom:11px; margin-bottom:11px}
+  .cover h1{font-size:26px; line-height:1.05; margin:4px 0 7px}
+  .cover h1 .accent{color:var(--rate)}
+  .cover .lede{font-size:11px; color:var(--ink2); max-width:155mm; line-height:1.48}
+  .cover .lede b{color:var(--ink)}
+
+  section{margin-bottom:9px}
+  .sech{display:flex; align-items:baseline; gap:9px; border-bottom:1px solid var(--hair);
+    padding-bottom:3px; margin-bottom:7px}
+  .sech h2{flex:1; white-space:nowrap}
+  .sech .no{font-family:var(--mono); font-size:9px; color:var(--faint); letter-spacing:.18em}
+  .sech h2{font-size:13.5px}
+  p{margin:0 0 7px}
+  .muted{color:var(--ink2)}
+  b.r{color:var(--rate)} b.l{color:var(--len)}
+
+  /* two-col */
+  .row{display:flex; gap:14px}
+  .col{flex:1}
+
+  /* stat cards */
+  .stats{display:flex; gap:8px; margin:3px 0 2px}
+  .stat{flex:1; border:1px solid var(--hair); border-radius:8px; padding:7px 10px; background:var(--tint)}
+  .stat .k{font-family:var(--mono); font-size:7.6px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint)}
+  .stat .now{font-family:var(--mono); font-size:17px; font-weight:600; margin-top:3px}
+  .stat .arrow{font-family:var(--mono); font-size:9px; color:var(--len); margin-top:2px}
+  .stat .arrow b{color:var(--rate)}
+
+  /* generic table */
+  table{width:100%; border-collapse:collapse; font-size:9.4px}
+  th,td{padding:5px 7px; border-bottom:1px solid var(--hair); vertical-align:top; text-align:left}
+  th{font-family:var(--mono); font-size:7.8px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--faint); font-weight:600; background:var(--tint)}
+  td.mono,th.mono{font-family:var(--mono)}
+  .week-tbl td:first-child{white-space:nowrap}
+  .phase{font-family:var(--mono); font-size:7.6px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--len); display:block; margin-top:2px}
+  .tempo{font-family:var(--mono); font-size:9px; color:var(--rate); white-space:nowrap}
+  .sets{font-size:9.2px; line-height:1.45}
+  .sets .lbl{font-family:var(--mono); font-size:7.4px; color:var(--faint); text-transform:uppercase; letter-spacing:.06em}
+  tr.foundation td{background:#f3f8f6} tr.build td{background:#fff}
+  tr.sharpen td{background:#f3f8f6} tr.peak td{background:#fbf4ec} tr.taper td{background:#eef4f8}
+
+  /* boxes */
+  .box{border:1px solid var(--hair); border-radius:9px; padding:9px 12px; background:var(--paper)}
+  .box.tint{background:var(--tint)}
+  .box h3{font-size:11px; margin-bottom:5px}
+  .box .formula{font-family:var(--mono); font-size:10px; background:#0e2438; color:#dff0ee;
+    padding:7px 9px; border-radius:6px; margin:6px 0; display:inline-block}
+  ul{margin:5px 0; padding-left:16px}
+  li{margin-bottom:2.5px}
+
+  /* session library — table grid for reliable print pagination */
+  table.libgrid{border-collapse:separate; border-spacing:11px 11px; width:100%; table-layout:fixed}
+  table.libgrid td{width:50%; padding:0; border:none; vertical-align:top}
+  .libcard{border:1px solid var(--hair); border-radius:9px; padding:10px 12px; background:var(--paper)}
+  .libcard .tag{font-family:var(--mono); font-size:7.6px; letter-spacing:.12em; text-transform:uppercase}
+  .libcard.pool .tag{color:var(--pace)} .libcard.dry .tag{color:var(--rate)}
+  .libcard h3{font-size:11px; margin:2px 0 5px}
+  .libcard table{font-size:8.8px} .libcard td{padding:3px 5px; border-bottom:1px dotted var(--hair); width:auto}
+
+  .keyrule{border-left:3px solid var(--rate); background:var(--tint); padding:8px 12px;
+    border-radius:0 7px 7px 0; margin:8px 0; font-size:10px}
+  .keyrule b{color:var(--rate)}
+  .legendline{font-family:var(--mono); font-size:8px; color:var(--faint); margin-top:3px}
+
+  footer{border-top:1px solid var(--hair); margin-top:12px; padding-top:7px;
+    font-family:var(--mono); font-size:7.7px; color:var(--faint); line-height:1.6}
+  .pb{page-break-before:always}
+  .avoid{page-break-inside:avoid}
+</style>
+</head>
+<body>
+
+<!-- ============ PAGE 1 ============ -->
+<div class="cover">
+  <div class="eyebrow">8-Week Plan · Pool + Dryland</div>
+  <h1>Raise the <span class="accent">turnover</span>,<br>hold the length.</h1>
+  <p class="lede">Your stroke length is already strong — about <b>1.79&nbsp;m per stroke</b>. Your speed is
+    capped by <b>turnover</b>: you cruise near <b>19.6 strokes/min</b>, and your rate sags in the back of long
+    swims. This block lifts your stroke rate toward <b>22–24/min</b> while protecting the length you've built,
+    pairing three pool sessions a week with two short dryland sessions that raise your power ceiling and keep
+    your shoulders durable. Everything is anchored to one test you run in Week&nbsp;1.</p>
+</div>
+
+<section class="avoid">
+  <div class="sech"><span class="no">01</span><h2>Where you stand</h2></div>
+  <div class="stats">
+    <div class="stat"><div class="k">stroke rate</div><div class="now">19.6</div><div class="arrow">→ <b>22–24</b> spm</div></div>
+    <div class="stat"><div class="k">dist / stroke</div><div class="now">1.79m</div><div class="arrow">hold ≥ 1.79</div></div>
+    <div class="stat"><div class="k">pure pace /100m</div><div class="now">2:50</div><div class="arrow">→ ~2:21–2:32</div></div>
+    <div class="stat"><div class="k">SWOLF</div><div class="now">~56</div><div class="arrow">→ falls as rate rises</div></div>
+  </div>
+  <p class="muted">Speed in the water is simply <b class="r">strokes/min</b> &times; <b class="l">distance/stroke</b>.
+    You've maxed the second term and let the first drift down. Restoring turnover to your old level while keeping
+    today's stroke length is, by your own numbers, worth roughly 20–30 seconds per 100m.</p>
+</section>
+
+<section class="avoid">
+  <div class="sech"><span class="no">02</span><h2>Two tests: Week 1 and Week 8</h2></div>
+  <div class="row">
+    <div class="col box tint">
+      <h3>Critical Swim Speed (your pace anchor)</h3>
+      <p class="muted">Warm up well. Swim a <b>400m</b> time trial all-out; rest 5+ min; swim a <b>200m</b> all-out.</p>
+      <div class="formula">CSS pace /100m = (400m time − 200m time) ÷ 2</div>
+      <p class="muted">Every "@ CSS" below means this pace. Re-test in Week 8 — it should drop. Your best-effort
+        history suggests a starting CSS near <b>2:21–2:25</b>; trust the test over the estimate.</p>
+    </div>
+    <div class="col box tint">
+      <h3>Stroke-count baseline (your length guardrail)</h3>
+      <p class="muted">On an easy 100m, count strokes per length (you're around <b>14</b> for 25m). Note it.</p>
+      <div class="keyrule"><b>The golden rule of this whole block:</b> when you add tempo, your strokes-per-length
+        must not climb more than a stroke or two. Faster rate at the same count = faster swimming. Faster rate
+        with a ballooning count = thrashing. Watch this number every tempo set.</div>
+    </div>
+  </div>
+</section>
+
+<section class="avoid">
+  <div class="sech"><span class="no">03</span><h2>How a week fits together</h2></div>
+  <div class="row">
+    <div class="col" style="flex:1.35">
+      <table>
+        <thead><tr><th>Day</th><th>Session</th><th>Why here</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">Mon</td><td><b style="color:var(--pace)">Pool · Threshold/Tempo</b></td><td>Keystone. Freshest day.</td></tr>
+          <tr><td class="mono">Tue</td><td><b class="r">Dryland A · Power &amp; turnover</b></td><td>Explosive; 4 days clear of the speed swim.</td></tr>
+          <tr><td class="mono">Wed</td><td>Rest / easy mobility</td><td>Absorb the hard start.</td></tr>
+          <tr><td class="mono">Thu</td><td><b style="color:var(--pace)">Pool · Technique &amp; aerobic</b></td><td>Low intensity; rebuild length.</td></tr>
+          <tr><td class="mono">Fri</td><td><b class="r">Dryland B · Strength-end &amp; resilience</b></td><td>Lower CNS load; safe before speed.</td></tr>
+          <tr><td class="mono">Sat</td><td><b style="color:var(--pace)">Pool · Speed &amp; race-pace</b></td><td>Top-end with legs/arms recovered.</td></tr>
+          <tr><td class="mono">Sun</td><td>Full rest</td><td>Adaptation happens now.</td></tr>
+        </tbody>
+      </table>
+      <p class="legendline">Template, not law — shift days to your life, but keep two rules: don't put Dryland A
+        (explosive) the day before the speed swim, and keep one easy/rest day before the threshold swim.</p>
+    </div>
+    <div class="col box">
+      <h3>Tempo Trainer settings</h3>
+      <p class="muted">Mode 1 (seconds per stroke). Set it one notch faster than your natural rhythm and climb
+        gradually. Hold your stroke count.</p>
+      <table>
+        <thead><tr><th>Weeks</th><th class="mono">beep (s)</th><th class="mono">≈ spm</th></tr></thead>
+        <tbody>
+          <tr><td>1–2</td><td class="mono">2.95</td><td class="mono">~20.3</td></tr>
+          <tr><td>3–4</td><td class="mono">2.85</td><td class="mono">~21.1</td></tr>
+          <tr><td>5–6</td><td class="mono">2.75</td><td class="mono">~21.8</td></tr>
+          <tr><td>7</td><td class="mono">2.65</td><td class="mono">~22.6</td></tr>
+          <tr><td>8</td><td colspan="2">free — feel your new rhythm</td></tr>
+        </tbody>
+      </table>
+      <p class="legendline">One beep = one arm entry. Calibrate to your device; the spm column is the goal.</p>
+    </div>
+  </div>
+</section>
+
+<footer>Built from your Apple Health swim history · pace targets scale to your tested CSS · page 1 of 3</footer>
+
+<!-- ============ PAGE 2 ============ -->
+<div class="pb"></div>
+
+<section>
+  <div class="sech"><span class="no">04</span><h2>The 8 weeks</h2></div>
+  <p class="muted" style="margin-bottom:8px">Pool mains shown; every session adds the warm-up, drills and cool-down
+    from the library below. "@ CSS" = your tested threshold pace; "+8" = 8s/100m slower, "−5" = 5s faster.</p>
+  <table class="week-tbl">
+    <thead><tr>
+      <th style="width:8%">Wk</th>
+      <th style="width:23%">Pool 1 · Threshold</th>
+      <th style="width:21%">Pool 2 · Technique</th>
+      <th style="width:22%">Pool 3 · Speed</th>
+      <th style="width:11%">Tempo</th>
+      <th style="width:15%">Dryland</th>
+    </tr></thead>
+    <tbody>
+      <tr class="foundation">
+        <td>1<span class="phase">Found.</span></td>
+        <td class="sets"><span class="lbl">test + set</span>CSS test (400+200 TT), then 6×100 @ CSS, 20s rest</td>
+        <td class="sets">8×50 drill (count strokes) · 6×100 @ CSS+8, lowest smooth count</td>
+        <td class="sets">12×25 fast, full rest · 4×100 @ CSS</td>
+        <td class="tempo">2.95s<br>~20 spm</td>
+        <td class="sets">A &amp; B at base loads — learn the patterns</td>
+      </tr>
+      <tr class="foundation">
+        <td>2<span class="phase">Found.</span></td>
+        <td class="sets">8×100 @ CSS, 15s rest</td>
+        <td class="sets">8×50 drill · 8×100 @ CSS+6, hold count</td>
+        <td class="sets">12×25 fast · 6×100 @ CSS, tempo on</td>
+        <td class="tempo">2.95s<br>~20 spm</td>
+        <td class="sets">A: +1 cord set · B: full prehab</td>
+      </tr>
+      <tr class="build">
+        <td>3<span class="phase">Build</span></td>
+        <td class="sets">5×200 @ CSS, 20s rest</td>
+        <td class="sets">drills · 6×150 @ CSS+6</td>
+        <td class="sets">16×25 fast · 4×150 @ CSS</td>
+        <td class="tempo">2.85s<br>~21 spm</td>
+        <td class="sets">A: power load up, cord 10×25s · B: +hinge load</td>
+      </tr>
+      <tr class="build">
+        <td>4<span class="phase">Build</span></td>
+        <td class="sets">400-300-200-100 descend @ CSS→CSS−3, 20s</td>
+        <td class="sets">drills · 8×100 @ CSS+5, lowest count</td>
+        <td class="sets">8×50 @ CSS−5 · 200 @ CSS</td>
+        <td class="tempo">2.85s<br>~21 spm</td>
+        <td class="sets">A &amp; B progress; quality over load</td>
+      </tr>
+      <tr class="sharpen">
+        <td>5<span class="phase">Sharpen</span></td>
+        <td class="sets">10×100 @ CSS, 12s rest, tempo on</td>
+        <td class="sets">drills · 6×150 @ CSS+4</td>
+        <td class="sets">16×25 @ CSS−5 · 4×100 @ CSS−2</td>
+        <td class="tempo">2.75s<br>~22 spm</td>
+        <td class="sets">B-cord → 5×45s turnover-endurance · A power sharp</td>
+      </tr>
+      <tr class="sharpen">
+        <td>6<span class="phase">Sharpen</span></td>
+        <td class="sets">6×200 @ CSS, 15s rest</td>
+        <td class="sets">drills · 8×100 @ CSS+4</td>
+        <td class="sets">12×50 @ CSS−5 · 200 @ CSS−2</td>
+        <td class="tempo">2.75s<br>~22 spm</td>
+        <td class="sets">turnover-endurance emphasis (late-swim sag)</td>
+      </tr>
+      <tr class="peak">
+        <td>7<span class="phase">Peak</span></td>
+        <td class="sets">8×100 @ CSS−2, 20s rest (quality)</td>
+        <td class="sets">short drills · 4×100 easy</td>
+        <td class="sets">8×25 sprint · 4×50 @ CSS−6</td>
+        <td class="tempo">2.65s<br>~22.6 spm</td>
+        <td class="sets">cut volume; keep explosive power crisp</td>
+      </tr>
+      <tr class="taper">
+        <td>8<span class="phase">Taper</span></td>
+        <td class="sets">easy · 4×100 @ CSS</td>
+        <td class="sets">easy technique swim</td>
+        <td class="sets"><b>RE-TEST:</b> CSS (400+200) + stroke count vs Week 1</td>
+        <td class="tempo">free</td>
+        <td class="sets">one light session only</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>"@ CSS" scales to your Week-1 test · hold your stroke count on every tempo set · page 2 of 3</footer>
+
+<!-- ============ PAGE 3 ============ -->
+<div class="pb"></div>
+
+<section>
+  <div class="sech"><span class="no">05</span><h2>Session library</h2></div>
+  <p class="muted" style="margin-bottom:8px">The standing structure each session hangs on. Pool sessions: ~300m warm-up,
+    the main set from the table, ~150m easy cool-down. Dryland: ~30 min, twice weekly.</p>
+  <table class="libgrid"><tbody>
+   <tr>
+    <td>
+    <div class="libcard pool avoid">
+      <div class="tag">Pool · session 1</div>
+      <h3>Threshold / Tempo</h3>
+      <table><tbody>
+        <tr><td>Warm-up</td><td>300m mixed, build last 50</td></tr>
+        <tr><td>Activate</td><td>4×25 build to CSS, Tempo Trainer on</td></tr>
+        <tr><td><b>Main</b></td><td>from the week table, @ CSS on short rest</td></tr>
+        <tr><td>Cue</td><td>hold stroke count; let the beep drive the hand</td></tr>
+        <tr><td>Cool-down</td><td>150m easy</td></tr>
+      </tbody></table>
+    </div>
+    </td>
+    <td>
+    <div class="libcard pool avoid">
+      <div class="tag">Pool · session 2</div>
+      <h3>Technique &amp; aerobic</h3>
+      <table><tbody>
+        <tr><td>Warm-up</td><td>300m easy</td></tr>
+        <tr><td>Drills</td><td>6–8×50: single-arm, catch-up, fingertip-drag — count every length</td></tr>
+        <tr><td><b>Main</b></td><td>from table, easy-moderate, lowest smooth count</td></tr>
+        <tr><td>Goal</td><td>protect &amp; extend distance/stroke; active recovery day</td></tr>
+        <tr><td>Cool-down</td><td>100m easy</td></tr>
+      </tbody></table>
+    </div>
+    </td>
+   </tr>
+   <tr>
+    <td>
+    <div class="libcard pool avoid">
+      <div class="tag">Pool · session 3</div>
+      <h3>Speed &amp; race-pace</h3>
+      <table><tbody>
+        <tr><td>Warm-up</td><td>300m + 4×25 build</td></tr>
+        <tr><td>Speed</td><td>short reps, full recovery — true top-end</td></tr>
+        <tr><td><b>Main</b></td><td>from table; race-pace reps with Tempo Trainer a notch up</td></tr>
+        <tr><td>Goal</td><td>raise the ceiling so cruise pace feels easy</td></tr>
+        <tr><td>Cool-down</td><td>150m easy</td></tr>
+      </tbody></table>
+    </div>
+    </td>
+    <td>
+    <div class="libcard dry avoid">
+      <div class="tag">Dryland · A</div>
+      <h3>Power &amp; turnover</h3>
+      <table><tbody>
+        <tr><td>Prep</td><td>5 min: band dislocates, scap push-ups, open-books</td></tr>
+        <tr><td>Power</td><td>med-ball slams 3×8 + rotational throws 3×8/side, explosive</td></tr>
+        <tr><td><b>Turnover</b></td><td>cord stroke-rate intervals: 8×25s fast / 60s rest, metronome above pool cadence</td></tr>
+        <tr><td>Pull</td><td>pull-ups 4×6–8 (band ok), drive up fast</td></tr>
+        <tr><td>Core</td><td>Pallof press 3×10/side · hollow hold 3×30s</td></tr>
+      </tbody></table>
+    </div>
+    </td>
+   </tr>
+   <tr>
+    <td>
+    <div class="libcard dry avoid">
+      <div class="tag">Dryland · B</div>
+      <h3>Strength-endurance &amp; resilience</h3>
+      <table><tbody>
+        <tr><td>Prep</td><td>5 min shoulder + thoracic mobility</td></tr>
+        <tr><td><b>Rate endur.</b></td><td>cord: 5×45s steady quick turnover / 75s rest (fixes late-swim sag)</td></tr>
+        <tr><td>Pull</td><td>bent-over row 3×10 · single-arm row 3×10</td></tr>
+        <tr><td>Posterior</td><td>RDL / KB hinge 3×10</td></tr>
+        <tr><td>Prehab</td><td>band ext. rotations 3×15 · face pulls 3×15 · Y-T-W 2×8</td></tr>
+        <tr><td>Core</td><td>side plank 3×30s/side · dead bug 3×8/side</td></tr>
+      </tbody></table>
+    </div>
+    </td>
+    <td>
+    <div class="libcard avoid" style="border-color:var(--rate)">
+      <div class="tag" style="color:var(--rate)">Guardrails</div>
+      <h3>Make it stick, stay healthy</h3>
+      <ul class="muted">
+        <li><b>Speed over load</b> — light resistance moved fast builds turnover; heavy &amp; slow doesn't.</li>
+        <li><b>Prehab is mandatory</b> — adding fast pulling volume is what triggers swimmer's shoulder. Sharp shoulder pain = stop.</li>
+        <li><b>Don't stack</b> the explosive dryland day before the speed swim; keep one easy day before the threshold swim.</li>
+        <li><b>One full rest day</b> a week — the gains land during recovery, not the session.</li>
+        <li><b>Land builds the engine; the pool spends it</b> — carry every cord turnover session into the water that week.</li>
+      </ul>
+    </div>
+    </td>
+   </tr>
+  </tbody></table>
+</section>
+
+<footer>Not medical advice — adjust to how your body responds, and see a coach for live stroke feedback when you can.
+  Re-test Week 8 and reload the tracker to watch rate &amp; length climb together · page 3 of 3</footer>
+
+</body>
+</html>

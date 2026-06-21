@@ -1,0 +1,26 @@
+# Never commit personal Apple Health data
+data/*
+!data/.gitkeep
+export.xml
+export.zip
+*export*.xml
+swim_laps.csv
+workouts.csv
+swims.csv
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+
+# Test artifacts (regenerable via tools/make_sample_data.py)
+tests/sample_export.xml
+tests/sample_swim_laps.csv
+tests/sample_expected.json
