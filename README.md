@@ -9,7 +9,7 @@ The toolkit exists to answer one coaching question:
 
 > **Is my speed improving — and through which lever, stroke efficiency or effort?**
 
-![The tracker's hero "balance" chart: every swim plotted as stroke rate (x) vs distance per stroke (y), with a target zone and equal-pace contours](docs/images/hero-balance.png)
+![The tracker's hero "balance" chart: every swim plotted as stroke rate (x) vs distance per stroke (y), colored by recency, with a target zone and equal-pace contours](docs/images/hero-balance.png)
 
 <sub>All screenshots use synthetic sample data (`tools/make_sample_data.py`) — no real health data.</sub>
 

@@ -226,7 +226,7 @@
     <!-- HERO: THE BALANCE -->
     <section class="card" id="heroCard">
       <div class="sechead"><span class="n">01</span><h3>The balance</h3></div>
-      <p class="sub">Each dot is a swim, faded by age. Up-and-right is faster. The teal band is where you want to live:
+      <p class="sub">Each dot is a swim, colored by how recently you swam it. Up-and-right is faster. The teal band is where you want to live:
         keep your stroke length, push your rate. Diagonal lines are equal-pace contours.</p>
       <div class="verdict">
         <div class="vtext" id="verdict"></div>
@@ -242,7 +242,11 @@
       </div>
       <div id="scatter"></div>
       <div class="legend">
-        <span><i style="background:var(--rate)"></i>latest swim</span>
+        <span><i style="background:#f4a259"></i>≤1 mo</span>
+        <span><i style="background:#6fcf97"></i>≤3 mo</span>
+        <span><i style="background:#8fb8e0"></i>≤6 mo</span>
+        <span><i style="background:#6b7fa0"></i>≤12 mo</span>
+        <span><i style="background:#46566b"></i>older</span>
         <span><i style="background:var(--len);opacity:.25"></i>target zone</span>
         <span style="color:var(--faint)">contour = pace per 100m</span>
       </div>
@@ -469,12 +473,16 @@ function renderScatter(swims){
   el("rect",{x:X(TARGET_SPM[0]),y:Y(TARGET_DPS[1]),
     width:X(TARGET_SPM[1])-X(TARGET_SPM[0]),height:Y(TARGET_DPS[0])-Y(TARGET_DPS[1]),
     fill:"#46cdbf",opacity:.10,stroke:"#46cdbf","stroke-opacity":.35,"stroke-width":1,rx:4},s);
-  // dots
+  // dots — colored by recency (months since today). Keep these hexes in sync with the
+  // hero legend swatches in the markup.
+  const now=Date.now();
+  const recColor=ageDays=> ageDays<=30?"#f4a259": ageDays<=90?"#6fcf97":
+    ageDays<=180?"#8fb8e0": ageDays<=365?"#6b7fa0":"#46566b";
   const n=swims.length;
   swims.forEach((z,i)=>{ if(!isFinite(z.spm)||!isFinite(z.dps))return;
     const latest=i===n-1;
-    const c=el("circle",{cx:X(z.spm),cy:Y(z.dps),r:latest?7:4,
-      fill:latest?"#f4a259":"#8fb8e0",opacity:latest?1:(0.18+0.5*i/n),
+    const c=el("circle",{cx:X(z.spm),cy:Y(z.dps),r:latest?7:4.2,
+      fill:recColor((now-z.date.getTime())/864e5),opacity:latest?1:0.82,
       stroke:latest?"#fff":"none","stroke-width":latest?1.5:0,class:"pt"},s);
     c.addEventListener("mousemove",e=>showTip(
       `<b>${fmtDate(z.date)}</b><br>${Math.round(z.dist)} m · ${fmtPace(z.pace100)}/100m<br>`+
