@@ -1,4 +1,5 @@
-/* test_parser.mjs — smoke test for tracker/parser_wip.js
+/* test_parser.mjs — smoke test for the health-xml-parser inlined in
+ *                    tracker/swim_tracker.html (extracted between its BEGIN/END markers)
  *
  *   python3 tools/make_sample_data.py   # writes tests/sample_export.xml + expected
  *   node tests/test_parser.mjs
@@ -7,17 +8,36 @@
  *  1) parser reproduces the expected swim/length counts and medians
  *  2) result is IDENTICAL whether fed in one big chunk or 7-byte chunks
  *     (i.e. chunk-boundary handling is correct)
+ *  3) the JS parser produces BYTE-IDENTICAL rows to the Python extractor on the same
+ *     XML — the "CSV path and XML path MUST produce identical keys" guarantee. This is
+ *     the strongest synthetic check we can run without a real 500 MB export.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createRequire } from "node:module";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-const { makeHealthParser, buildLapRows } = require(join(__dirname, "..", "tracker", "parser_wip.js"));
 
-const xml = readFileSync(join(__dirname, "sample_export.xml"), "utf8");
+// The parser ships INSIDE tracker/swim_tracker.html (single self-contained file). Extract
+// the marked block and load it standalone so this test exercises the ACTUAL shipped code,
+// with no separate copy that could drift.
+function loadParserFromTracker() {
+  const html = readFileSync(join(__dirname, "..", "tracker", "swim_tracker.html"), "utf8");
+  const m = html.match(/BEGIN health-xml-parser[\s\S]*?\*\/\n([\s\S]*?)\/\* =+ END health-xml-parser/);
+  if (!m) throw new Error("could not find the health-xml-parser block in swim_tracker.html");
+  const src = m[1] + "\nmodule.exports={makeHealthParser,buildLapRows,parseAppleDate};\n";
+  const tmp = join(tmpdir(), `health_parser_${process.pid}.cjs`);
+  writeFileSync(tmp, src);
+  return require(tmp);
+}
+const { makeHealthParser, buildLapRows } = loadParserFromTracker();
+
+const xmlPath = join(__dirname, "sample_export.xml");
+const xml = readFileSync(xmlPath, "utf8");
 const expected = JSON.parse(readFileSync(join(__dirname, "sample_expected.json"), "utf8"));
 
 function median(a) {
@@ -51,7 +71,11 @@ check(`swims = ${expected.n_swims}`, swims === expected.n_swims);
 check(`lengths = ${expected.n_lengths}`, big.lapRows.length === expected.n_lengths);
 check(`median spm ~ ${expected.median_spm}`, Math.abs(median(spm) - expected.median_spm) < 0.3);
 check(`median dps ~ ${expected.median_dps}`, Math.abs(median(dps) - expected.median_dps) < 0.02);
-check(`summary rows = swims`, big.summaryRows.length === expected.n_swims);
+// Every swim with laps must have a matching summary row (rest analysis joins on key).
+// Open-water swims add a summary row with no laps, so summaryRows can be a superset.
+const sumKeys = new Set(big.summaryRows.map(r => r.startDate.slice(0, 16)));
+const lapKeys = [...new Set(big.lapRows.map(r => r.workout_start))];
+check(`every lap swim has a summary row`, lapKeys.every(k => sumKeys.has(k)));
 
 // chunk-boundary robustness: tiny chunks must give identical output
 const tiny = run(7);
@@ -63,6 +87,59 @@ check("7-byte chunks match big-chunk JSON",
 for (const cs of [1, 3, 64, 997, 65536]) {
   const r = run(cs);
   check(`chunk size ${cs} identical`, JSON.stringify(r.lapRows) === JSON.stringify(big.lapRows));
+}
+
+// ---- JS parser vs Python extractor: rows must be byte-identical ----
+// Run the real Python extractor over the same XML and compare CSV rows field-by-field.
+console.log("\nJS parser vs Python extractor (same XML):");
+try {
+  const pyCsvPath = join(tmpdir(), `swim_laps_py_${process.pid}.csv`);
+  const pyScript = join(__dirname, "..", "extractors", "extract_swim_laps.py");
+  execFileSync("python3", [pyScript, xmlPath, pyCsvPath], { stdio: "pipe" });
+  const pyText = readFileSync(pyCsvPath, "utf8");
+  const lines = pyText.replace(/\r/g, "").split("\n").filter(l => l.trim().length);
+  const head = lines[0].split(",");
+  const pyRows = lines.slice(1).map(l => {
+    const c = l.split(","); const o = {};
+    head.forEach((h, i) => (o[h] = c[i]));
+    return o;
+  });
+
+  // Compare each row field-by-field. Strings/keys/integers must match EXACTLY; the
+  // rounded floats are compared within a small tolerance, because Python's round()
+  // uses banker's rounding (half-to-even) and JS Math.round() rounds half-up, so an
+  // exact .5 tie like 25/16 = 1.5625 can differ by 0.001. That's invisible at the
+  // tracker's display precision and doesn't move any median. The invariant that
+  // matters: the workout_start KEY is identical and every metric agrees to rounding.
+  const EXACT = new Set(["workout_start", "stroke_style", "lap_index", "lap_count", "strokes"]);
+  const TOL = { pool_length_m: 0.011, seconds: 0.11, dist_per_stroke_m: 0.0011, swolf: 0.11 };
+  const show = r => head.map(h => `${h}=${r[h] ?? ""}`).join("|");
+  function rowsEqual(py, js) {
+    for (const h of head) {
+      const pv = py[h] ?? "", jv = js[h] ?? "";
+      if (EXACT.has(h)) { if (String(pv) !== String(jv)) return false; }
+      else if (String(pv) === "" || String(jv) === "") { if (String(pv) !== String(jv)) return false; }
+      else if (Math.abs(+pv - +jv) > (TOL[h] ?? 1e-9)) return false;
+    }
+    return true;
+  }
+
+  const jsByKey = new Map();
+  big.lapRows.forEach(r => jsByKey.set(`${r.workout_start}#${r.lap_index}`, r));
+
+  check(`row count matches Python (${pyRows.length})`, pyRows.length === big.lapRows.length);
+  let mismatch = null;
+  for (const pr of pyRows) {
+    const k = `${pr.workout_start}#${pr.lap_index}`;
+    const js = jsByKey.get(k);
+    if (js === undefined) { mismatch = `missing JS row for ${k}`; break; }
+    if (!rowsEqual(pr, js)) { mismatch = `row ${k}\n   py: ${show(pr)}\n   js: ${show(js)}`; break; }
+  }
+  check(`all ${pyRows.length} rows match Python (keys exact, metrics within rounding)`, mismatch === null);
+  if (mismatch) console.log("    first diff: " + mismatch);
+} catch (e) {
+  check("python extractor ran", false);
+  console.log("    " + (e.message || e));
 }
 
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed.");

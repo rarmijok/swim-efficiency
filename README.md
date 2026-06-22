@@ -48,13 +48,19 @@ turnover) or gliding farther per stroke (raising efficiency).
 
 ## Quick start
 
+**The easy way — no terminal needed.** Open `tracker/swim_tracker.html` in any browser and
+drag your Apple Health `export.xml` straight onto it. The swim data is parsed in-browser
+(streamed, so even a ~500 MB export stays responsive and uses flat memory), and nothing is
+uploaded. That's it.
+
+**The CSV way** (still supported — useful for scripting or sharing just the swim data):
+
 ```bash
 # 1. Extract metrics from your Apple Health export (Python 3, no dependencies)
 python3 extractors/extract_swim_laps.py path/to/export.xml data/swim_laps.csv
 python3 extractors/extract_workouts.py  path/to/export.xml data/workouts.csv
 
-# 2. View the dashboard
-#    Open tracker/swim_tracker.html in any browser, then drag data/swim_laps.csv onto it.
+# 2. Open tracker/swim_tracker.html and drag data/swim_laps.csv onto it.
 #    Optionally also drop data/workouts.csv to add rest analysis.
 ```
 

@@ -84,8 +84,9 @@ The training plan (`plan/`) and the tracker's "target zone" both encode these ta
 python3 extractors/extract_swim_laps.py path/to/export.xml data/swim_laps.csv
 python3 extractors/extract_workouts.py  path/to/export.xml data/workouts.csv
 
-# tracker: open tracker/swim_tracker.html in a browser, drop data/swim_laps.csv on it
-#          (optionally also drop data/workouts.csv -> adds rest analysis)
+# tracker: open tracker/swim_tracker.html in a browser, then EITHER
+#   - drop the raw Apple Health export.xml on it (parsed in-browser, no Python step), OR
+#   - drop data/swim_laps.csv (optionally also data/workouts.csv -> adds rest analysis)
 
 # plan PDF (needs weasyprint)
 pip install -r requirements.txt
@@ -93,27 +94,22 @@ python3 plan/generate_plan.py        # plan/plan.html -> plan/swim_plan_8week.pd
 
 # generate synthetic test data (no personal data) for parser testing
 python3 tools/make_sample_data.py    # writes tests/sample_export.xml + tests/sample_swim_laps.csv
-node tests/test_parser.mjs           # streams sample_export.xml through the WIP parser
+node tests/test_parser.mjs           # extracts the parser from swim_tracker.html and checks it
+                                     # reproduces extract_swim_laps.py row-for-row (needs node)
 ```
 
 ## UNFINISHED WORK — pick up here
 
-The next feature was in progress when this repo was packaged. Two goals the swimmer asked for:
-
-1. **Ingest `export.xml` directly in the tracker** (eliminate the Python step). Drop the raw
-   `export.xml` onto `swim_tracker.html`; parse it in-browser by streaming; produce the same
-   lap rows (and summary rows for rest analysis) the Python extractors produce; then feed the
-   existing `aggregate()` unchanged.
-   - A **draft streaming parser** exists at `tracker/parser_wip.js` (well-commented, but
-     **untested against a real 500 MB export** — only against synthetic data). Finish + harden it.
-   - Stream via `Blob.slice(a,b).arrayBuffer()` + `TextDecoder({stream:true})`, ~8 MB chunks,
-     a sliding string buffer, extracting complete `<Record>`/`<Workout>` elements and handling
-     chunk-boundary splits. Show a progress bar (`offset / file.size`). Keep memory flat.
-   - Then integrate into `ingest()` in `swim_tracker.html`: detect XML (extension `.xml`, or
-     content starts with `<?xml` / contains `<HealthData`) → stream path; keep the CSV path for
-     backward compatibility.
-   - **Validate** against the real `data/export.xml` (gitignored) once present, and confirm the
-     XML path reproduces the same per-year medians as `swim_laps.csv` (see docs/FINDINGS.md).
+1. **Ingest `export.xml` directly in the tracker** — ✅ **DONE**. The streaming parser now
+   lives inline in `swim_tracker.html` between the `BEGIN/END health-xml-parser` markers
+   (no separate file — the old `tracker/parser_wip.js` was removed). `ingest()` detects XML
+   (by `.xml` extension or by sniffing for `<?xml` / `<HealthData`) and streams it in ~8 MB
+   chunks with a progress bar; the CSV path still works unchanged. `tests/test_parser.mjs`
+   extracts that exact block and asserts it reproduces `extract_swim_laps.py` row-for-row on
+   a quirky synthetic export, across every chunk-boundary.
+   - **STILL TODO**: validate against a real ~500 MB `data/export.xml` (gitignored) once present
+     — confirm the XML path reproduces the same per-year medians as `swim_laps.csv` (docs/FINDINGS.md)
+     and that parse time / memory are acceptable at full scale. Only synthetic data has been used so far.
 
 2. **Save & compare exports**. Each new drop should show what changed since last time.
    - Add a **"Save checkpoint"** button that downloads a small JSON of the per-swim aggregates
