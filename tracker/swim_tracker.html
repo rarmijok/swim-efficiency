@@ -229,6 +229,11 @@
       </div>
     </section>
 
+    <!-- KPIs -->
+    <section>
+      <div class="kpis" id="kpis"></div>
+    </section>
+
     <!-- HERO: THE BALANCE -->
     <section class="card" id="heroCard">
       <div class="sechead"><span class="n">01</span><h3>The balance</h3></div>
@@ -256,11 +261,6 @@
         <span><i style="background:var(--len);opacity:.25"></i>target zone</span>
         <span style="color:var(--faint)">contour = pace per 100m</span>
       </div>
-    </section>
-
-    <!-- KPIs -->
-    <section>
-      <div class="kpis" id="kpis"></div>
     </section>
 
     <!-- TRENDS -->
@@ -298,30 +298,9 @@
       </div>
     </section>
 
-    <!-- BEST EFFORTS -->
-    <section class="card">
-      <div class="sechead"><span class="n">05</span><h3>Best efforts</h3></div>
-      <p class="sub">Fastest stretches of continuous swimming on record (pure pace per 100m).
-        <span id="cssNote"></span></p>
-      <div class="efforts" id="efforts"></div>
-    </section>
-
-    <!-- SWIM DETAIL -->
-    <section class="card">
-      <div class="sechead"><span class="n">06</span><h3>Inside one swim</h3></div>
-      <p class="sub">Length-by-length. Use this to check a tempo set: did your rate rise without your length collapsing?</p>
-      <div style="margin-bottom:12px"><select id="swimSel"></select></div>
-      <div id="swimDetail"></div>
-      <div class="legend">
-        <span><i style="background:var(--pace)"></i>pace / length</span>
-        <span><i style="background:var(--rate)"></i>strokes / min</span>
-        <span><i style="background:var(--len)"></i>distance / stroke</span>
-      </div>
-    </section>
-
     <!-- COMPARE PERIODS -->
     <section class="card" id="compareCard">
-      <div class="sechead"><span class="n">07</span><h3>Compare two periods</h3></div>
+      <div class="sechead"><span class="n">05</span><h3>Compare two periods</h3></div>
       <p class="sub">Pick any two stretches of time and see how your stroke moved between them.
         The arrow on the chart is the headline: which way did turnover and length drift?</p>
       <div class="cmpbar">
@@ -342,6 +321,27 @@
         <span><i style="background:var(--pace)"></i>period A</span>
         <span><i style="background:var(--rate)"></i>period B</span>
         <span style="color:var(--faint)">○ = period median · arrow = A → B move · box = target zone</span>
+      </div>
+    </section>
+
+    <!-- BEST EFFORTS -->
+    <section class="card">
+      <div class="sechead"><span class="n">06</span><h3>Best efforts</h3></div>
+      <p class="sub">Fastest stretches of continuous swimming on record (pure pace per 100m).
+        <span id="cssNote"></span></p>
+      <div class="efforts" id="efforts"></div>
+    </section>
+
+    <!-- SWIM DETAIL -->
+    <section class="card">
+      <div class="sechead"><span class="n">07</span><h3>Inside one swim</h3></div>
+      <p class="sub">Length-by-length. Use this to check a tempo set: did your rate rise without your length collapsing?</p>
+      <div style="margin-bottom:12px"><select id="swimSel"></select></div>
+      <div id="swimDetail"></div>
+      <div class="legend">
+        <span><i style="background:var(--pace)"></i>pace / length</span>
+        <span><i style="background:var(--rate)"></i>strokes / min</span>
+        <span><i style="background:var(--len)"></i>distance / stroke</span>
       </div>
     </section>
 
