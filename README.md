@@ -9,6 +9,10 @@ The toolkit exists to answer one coaching question:
 
 > **Is my speed improving — and through which lever, stroke efficiency or effort?**
 
+![The tracker's hero "balance" chart: every swim plotted as stroke rate (x) vs distance per stroke (y), with a target zone and equal-pace contours](docs/images/hero-balance.png)
+
+<sub>All screenshots use synthetic sample data (`tools/make_sample_data.py`) — no real health data.</sub>
+
 ## How it works
 
 ```
@@ -41,18 +45,26 @@ vanilla JS + SVG.
 | **Cardiac cost** | `avg HR/60 × pure pace/100m` | beats per 100 m — effort economy (lower is better) |
 | **CSS** (Critical Swim Speed) | `(400m TT − 200m TT) / 2` per 100m | sustainable race pace |
 
-The tracker's hero chart plots **SPM vs DPS** with a target zone and equal-pace contours, so
-you can see at a glance whether you're getting faster by spinning your arms quicker (raising
-turnover) or gliding farther per stroke (raising efficiency).
+The tracker's hero chart (above) plots **SPM vs DPS** with a target zone and equal-pace contours,
+so you can see at a glance whether you're getting faster by spinning your arms quicker (raising
+turnover) or gliding farther per stroke (raising efficiency). The headline KPIs summarize the
+recent trend:
+
+![KPI tiles: pure pace, strokes/min, distance/stroke, SWOLF, avg HR, beats/100m, volume and rest, each with its change vs the prior block](docs/images/kpis.png)
 
 It also folds in **heart rate as effort** — per-swim avg/max HR plus a *cardiac cost* metric
 (**beats per 100 m**): fewer beats to cover the same distance means you got fitter or more
 efficient, not just that you worked harder. This is what separates "faster because I improved"
 from "faster because I pushed."
 
-And it lets you **compare any two periods** — pick two date ranges (or a preset like "2025 vs
-2026" or "last 8 weeks vs prior 8 weeks") and see a side-by-side metric strip, a plain-English
-verdict, and a two-color scatter with an arrow showing exactly how your stroke drifted between them.
+![Effort & economy chart: beats per 100 m (cardiac cost) over time with an average heart-rate reference line](docs/images/effort-economy.png)
+
+And it lets you **compare any two periods** — pick two date ranges (or a preset like "last 90 days
+vs previous 90 days" or "last year vs previous year") and see a side-by-side metric strip, a
+plain-English verdict, and a two-color scatter with an arrow showing exactly how your stroke
+drifted between them.
+
+![Compare two periods: an A/B/Δ metric strip, a one-line verdict, and a two-color scatter with an arrow from period A's median to period B's](docs/images/compare-periods.png)
 
 > Color code (kept consistent everywhere): **amber = stroke rate**, **teal = distance/stroke**.
 
