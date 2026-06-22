@@ -805,19 +805,18 @@ function renderCompare(){
 }
 
 function computePresets(){
-  const ds=SWIMS.map(z=>z.date), min=ds[0], max=ds[ds.length-1], day=864e5, out=[];
-  const yrs=[...new Set(SWIMS.map(z=>z.date.getFullYear()))].sort();
-  for(let i=0;i<yrs.length-1;i++){const y1=yrs[i],y2=yrs[i+1];
-    out.push({label:`${y1} vs ${y2}`, a:[new Date(y1,0,1),new Date(y1,11,31)],
-      b:[new Date(y2,0,1),new Date(y2,11,31)], isDefault:i===yrs.length-2});}
-  out.push({label:"Last 8 weeks vs prior 8 weeks",
-    a:[new Date(+max-112*day),new Date(+max-56*day)], b:[new Date(+max-56*day),new Date(+max)]});
-  out.push({label:"Last 90 days vs prior 90 days",
-    a:[new Date(+max-180*day),new Date(+max-90*day)], b:[new Date(+max-90*day),new Date(+max)]});
-  out.push({label:"First half vs second half",
-    a:[min,new Date((+min+ +max)/2)], b:[new Date((+min+ +max)/2),max]});
-  if(!out.some(p=>p.isDefault))out[0].isDefault=true;
-  return out;
+  const ds=SWIMS.map(z=>z.date), max=ds[ds.length-1], day=864e5;
+  // B = the last `recentDays` (ending at the latest swim); A = the `baseDays` immediately before it.
+  const win=(recentDays,baseDays)=>{const bStart=+max-recentDays*day;
+    return {a:[new Date(bStart-baseDays*day),new Date(bStart)], b:[new Date(bStart),new Date(+max)]};};
+  const mk=(label,recentDays,baseDays,isDefault)=>Object.assign({label,isDefault:!!isDefault},win(recentDays,baseDays));
+  return [
+    mk("Last 7 days vs previous 30 days", 7, 30),
+    mk("Last 30 days vs previous 30 days", 30, 30),
+    mk("Last 90 days vs previous 90 days", 90, 90, true),
+    mk("Last 180 days vs previous 180 days", 180, 180),
+    mk("Last year vs previous year", 365, 365),
+  ];
 }
 function applyPreset(p){$("#aFrom").value=fmtISO(p.a[0]); $("#aTo").value=fmtISO(p.a[1]);
   $("#bFrom").value=fmtISO(p.b[0]); $("#bTo").value=fmtISO(p.b[1]); renderCompare();}

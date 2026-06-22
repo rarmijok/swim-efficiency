@@ -125,10 +125,10 @@ node tests/test_parser.mjs           # extracts the parser from swim_tracker.htm
 2. **Compare two periods** — ✅ **DONE** (section 06 "Compare two periods" in the tracker).
    The swimmer chose this over the original "since last check" checkpoint idea: instead of a
    saved baseline, pick **two arbitrary date ranges (A and B)** and see how the stroke moved.
-   - **Presets + custom**: a preset dropdown (consecutive year pairs, last-8-weeks-vs-prior,
-     last-90-vs-prior, first-vs-second-half — built from the loaded data's date span) fills four
-     `<input type=date>` fields; editing any field switches the preset to "Custom". Default is
-     the latest year pair.
+   - **Presets + custom**: a preset dropdown of rolling windows anchored at the latest swim —
+     last 7 days vs previous 30, last 30 vs previous 30, last 90 vs previous 90 (default), last 180
+     vs previous 180, last year vs previous year — fills four `<input type=date>` fields; editing any
+     field switches the preset to "Custom". (B = the recent window, A = the window immediately before.)
    - **Comparison strip** (A · B · Δ) for swims, distance, SPM, DPS, pure pace, SWOLF, and —
      when `swims.csv`/summary is present — session pace + rest%. Δ is colored by *meaning*
      (`.up`/`.down`/`.flat`): SPM up = good, pace/SWOLF down = good, DPS/volume neutral.
