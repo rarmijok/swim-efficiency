@@ -13,6 +13,11 @@ The toolkit exists to answer one coaching question:
 
 <sub>All screenshots use synthetic sample data (`tools/make_sample_data.py`) — no real health data.</sub>
 
+The dashboard opens with an at-a-glance **last-30-days** strip — distance & pace, and time in
+water & heart rate, day by day (gaps are rest days):
+
+![Last 30 days: two dual-axis day-by-day charts — distance bars with a pace line, and time-in-water bars with an average heart-rate line](docs/images/last-30-days.png)
+
 ## How it works
 
 ```
