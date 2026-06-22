@@ -107,9 +107,11 @@ node tests/test_parser.mjs           # extracts the parser from swim_tracker.htm
    chunks with a progress bar; the CSV path still works unchanged. `tests/test_parser.mjs`
    extracts that exact block and asserts it reproduces `extract_swim_laps.py` row-for-row on
    a quirky synthetic export, across every chunk-boundary.
-   - **STILL TODO**: validate against a real ~500 MB `data/export.xml` (gitignored) once present
-     — confirm the XML path reproduces the same per-year medians as `swim_laps.csv` (docs/FINDINGS.md)
-     and that parse time / memory are acceptable at full scale. Only synthetic data has been used so far.
+   - **Validated against the real export** (809 MB, HealthKit Export Version 14): the XML path
+     reproduces `data/swim_laps.csv` exactly — **8640 lengths across 227 swims, every row matching**
+     (keys exact, metrics within rounding) and identical per-year SPM/DPS medians. Streamed in a
+     couple of seconds with flat memory (peak RSS ~360 MB in node). Re-run any time with
+     `node tools/validate_xml_parser.mjs <export.xml> <swim_laps.csv>`.
 
 2. **Save & compare exports**. Each new drop should show what changed since last time.
    - Add a **"Save checkpoint"** button that downloads a small JSON of the per-swim aggregates
