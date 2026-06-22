@@ -209,16 +209,22 @@
   </div>
 
   <div id="app">
-    <!-- LAST 30 DAYS -->
-    <section class="card" id="last30Card">
-      <div class="sechead"><h3>Last 30 days</h3></div>
-      <p class="sub">Day by day — distance, pace, and time in the water. Gaps are rest days.</p>
+    <!-- OVERVIEW -->
+    <section class="card" id="overviewCard">
+      <div class="sechead" style="justify-content:space-between;align-items:center">
+        <h3>Overview</h3>
+        <div class="toggle" id="ovToggle">
+          <button data-m="days" class="on">30 days</button>
+          <button data-m="months">12 months</button>
+        </div>
+      </div>
+      <p class="sub" id="ovSub">Day by day over the last 30 days — distance, pace, and time in the water. Gaps are rest days.</p>
       <div class="grid2">
         <div class="mini"><div class="minihd">Distance &amp; pace
-          <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#46cdbf;margin-right:3px;vertical-align:-1px"></i>m/day<i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#8fb8e0;margin:0 3px 0 9px;vertical-align:-1px"></i>/100m · faster ↑</span></div>
+          <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#46cdbf;margin-right:3px;vertical-align:-1px"></i><span id="ovUnitDist">m/day</span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#8fb8e0;margin:0 3px 0 9px;vertical-align:-1px"></i>/100m · faster ↑</span></div>
           <div id="d30DistPace"></div></div>
         <div class="mini"><div class="minihd">Time in water &amp; HR
-          <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#88a0b4;margin-right:3px;vertical-align:-1px"></i>min/day<i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#e8717a;margin:0 3px 0 9px;vertical-align:-1px"></i>avg HR</span></div>
+          <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#88a0b4;margin-right:3px;vertical-align:-1px"></i><span id="ovUnitTime">min/day</span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#e8717a;margin:0 3px 0 9px;vertical-align:-1px"></i>avg HR</span></div>
           <div id="d30Time"></div></div>
       </div>
     </section>
@@ -439,7 +445,7 @@ function showTip(html,evt){tip.innerHTML=html; tip.style.opacity=1;
 function hideTip(){tip.style.opacity=0;}
 
 /* ---------- state ---------- */
-let SWIMS=[], SUMMARY=null, HASHR=false, CMP_PRESETS=[];
+let SWIMS=[], SUMMARY=null, HASHR=false, CMP_PRESETS=[], OVERVIEW_MODE="days";
 const sign=d=>d>0?"+":"";
 
 /* ---------- renderers ---------- */
@@ -703,27 +709,40 @@ function renderFoot(swims){
     `Reads files locally; nothing leaves this device.`;
 }
 
-/* ---------- last 30 days (day-by-day) ---------- */
-function buildLast30(){
-  const now=new Date();
-  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate()); // local midnight
-  const days=[];
-  for(let i=29;i>=0;i--){
-    const ds=new Date(today.getTime()-i*864e5), de=new Date(ds.getTime()+864e5);
-    const sw=SWIMS.filter(z=>z.date>=ds&&z.date<de);
-    let dist=0, secPure=0, secWater=0, hrNum=0, hrDen=0;
-    sw.forEach(z=>{dist+=z.dist; secPure+=z.totalSec;
-      const w=isFinite(z.woSec)?z.woSec:z.totalSec; secWater+=w;
-      if(isFinite(z.avgHr)){hrNum+=z.avgHr*w; hrDen+=w;}});  // HR weighted by time in water
-    days.push({date:ds, n:sw.length, dist, secPure, secWater,
-      pace: dist>0? secPure/dist*100 : NaN, min: secWater/60,
-      avgHr: hrDen>0? hrNum/hrDen : NaN});
+/* ---------- overview (last 30 days, or last 12 months) ---------- */
+// Aggregate one bucket's swims. avgHr and pace are weighted by time in water.
+function ovAgg(sw,date,span,xlabel,tipLabel){
+  let dist=0, secPure=0, secWater=0, hrNum=0, hrDen=0;
+  sw.forEach(z=>{dist+=z.dist; secPure+=z.totalSec;
+    const w=isFinite(z.woSec)?z.woSec:z.totalSec; secWater+=w;
+    if(isFinite(z.avgHr)){hrNum+=z.avgHr*w; hrDen+=w;}});
+  return {date, span, xlabel, tipLabel, n:sw.length, dist, secPure, secWater,
+    pace: dist>0? secPure/dist*100 : NaN, min: secWater/60, avgHr: hrDen>0? hrNum/hrDen : NaN};
+}
+function buildOverview(mode){
+  const now=new Date(), buckets=[];
+  if(mode==="months"){
+    const base=new Date(now.getFullYear(),now.getMonth(),1);
+    for(let i=11;i>=0;i--){
+      const ms=new Date(base.getFullYear(),base.getMonth()-i,1), me=new Date(ms.getFullYear(),ms.getMonth()+1,1);
+      buckets.push(ovAgg(SWIMS.filter(z=>z.date>=ms&&z.date<me), ms, "month",
+        ms.toLocaleDateString(undefined,{month:"short"}),
+        ms.toLocaleDateString(undefined,{month:"short",year:"2-digit"})));
+    }
+  } else {
+    const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    for(let i=29;i>=0;i--){
+      const ds=new Date(today.getTime()-i*864e5), de=new Date(ds.getTime()+864e5);
+      buckets.push(ovAgg(SWIMS.filter(z=>z.date>=ds&&z.date<de), ds, "day",
+        ds.toLocaleDateString(undefined,{month:"short",day:"numeric"}),
+        ds.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})));
+    }
   }
-  return days;
+  return buckets;
 }
 function dayTip(d){
-  const head=`<b>${d.date.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}</b>`;
-  if(!d.n)return head+"<br>rest day";
+  const head=`<b>${d.tipLabel}</b>`;
+  if(!d.n)return head+(d.span==="month"?"<br>no swims":"<br>rest day");
   return head+`<br>${Math.round(d.dist)} m · ${fmtPace(d.pace)}/100m<br>`+
     `${(d.secWater/60).toFixed(0)} min in water · ${d.n} swim${d.n>1?"s":""}`+
     (isFinite(d.avgHr)?`<br>${Math.round(d.avgHr)} bpm avg`:"");
@@ -756,17 +775,27 @@ function renderDayDual(hostSel,days,bar,line){
   if(haveLine){let path=""; days.forEach((d,i)=>{const v=line.pick(d); if(!isFinite(v))return; path+=(path?"L":"M")+X(i)+" "+Yl(v);});
     if(path)el("path",{d:path,fill:"none",stroke:line.color,"stroke-width":1.4,opacity:.5},s);
     days.forEach((d,i)=>{const v=line.pick(d); if(!isFinite(v))return; hook(el("circle",{cx:X(i),cy:Yl(v),r:3,fill:line.color},s),d);});}
-  [0,n-1].forEach(i=>el("text",{x:X(i),y:H-7,fill:"#5c768c","font-size":8.5,"text-anchor":i===0?"start":"end","font-family":"var(--mono)"},s)
-    .textContent=days[i].date.toLocaleDateString(undefined,{month:"short",day:"numeric"}));
+  if(n<=12)days.forEach((d,i)=>el("text",{x:X(i),y:H-7,fill:"#5c768c","font-size":8.5,"text-anchor":"middle","font-family":"var(--mono)"},s).textContent=d.xlabel);
+  else [0,n-1].forEach(i=>el("text",{x:X(i),y:H-7,fill:"#5c768c","font-size":8.5,"text-anchor":i===0?"start":"end","font-family":"var(--mono)"},s).textContent=days[i].xlabel);
 }
-function renderLast30(){
-  const days=buildLast30();
-  renderDayDual("#d30DistPace",days,
+function renderOverview(mode){
+  const b=buildOverview(mode);
+  renderDayDual("#d30DistPace",b,
     {pick:d=>d.n?d.dist:NaN, color:"#46cdbf", fmtY:v=>Math.round(v)},
     {pick:d=>(d.n&&isFinite(d.pace))?d.pace:NaN, color:"#8fb8e0", fmtY:v=>fmtPace(v), invert:true});
-  renderDayDual("#d30Time",days,
+  renderDayDual("#d30Time",b,
     {pick:d=>d.n?d.min:NaN, color:"#88a0b4", fmtY:v=>Math.round(v)},
     {pick:d=>isFinite(d.avgHr)?d.avgHr:NaN, color:"#e8717a", fmtY:v=>Math.round(v)});
+}
+function applyOverviewMode(mode){
+  OVERVIEW_MODE=mode;
+  [...$("#ovToggle").children].forEach(btn=>btn.classList.toggle("on",btn.dataset.m===mode));
+  $("#ovSub").textContent = mode==="months"
+    ? "Month by month over the last 12 months — distance, pace, and time in the water."
+    : "Day by day over the last 30 days — distance, pace, and time in the water. Gaps are rest days.";
+  $("#ovUnitDist").textContent = mode==="months"?"m/mo":"m/day";
+  $("#ovUnitTime").textContent = mode==="months"?"min/mo":"min/day";
+  renderOverview(mode);
 }
 
 /* ---------- compare two periods ---------- */
@@ -967,7 +996,9 @@ function setupRange(){
 function build(){
   if(SWIMS.length<2){showError("Need at least two swims with lap data to chart trends."); return;}
   $("#empty").style.display="none"; $("#app").style.display="block";
-  renderLast30(); renderVerdict(SWIMS); renderKPIs(SWIMS);
+  $("#ovToggle").onclick=e=>{const b=e.target.closest("button"); if(b)applyOverviewMode(b.dataset.m);};
+  applyOverviewMode(OVERVIEW_MODE);
+  renderVerdict(SWIMS); renderKPIs(SWIMS);
   renderScatter(SWIMS); renderTrendBalance(SWIMS); renderTrendPace(SWIMS);
   if(HASHR){$("#hrCard").style.display=""; renderEconomy(SWIMS);} else $("#hrCard").style.display="none";
   renderEfforts(SWIMS); fillSelector(SWIMS); renderSwimDetail(SWIMS[SWIMS.length-1]);
