@@ -97,6 +97,10 @@
   /* charts */
   .grid2{display:grid; grid-template-columns:1fr 1fr; gap:18px}
   @media(max-width:820px){.grid2{grid-template-columns:1fr}}
+  .grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:18px}
+  @media(max-width:820px){.grid3{grid-template-columns:1fr}}
+  .mini .minihd{font-family:var(--mono); font-size:11.5px; color:var(--ink); margin-bottom:2px}
+  .mini .minihd span{color:var(--faint); font-size:10px; letter-spacing:.03em; margin-left:6px}
   svg{width:100%; height:auto; display:block}
   .legend{display:flex; gap:16px; flex-wrap:wrap; font-family:var(--mono);
     font-size:11px; color:var(--muted); margin-top:10px}
@@ -205,6 +209,20 @@
   </div>
 
   <div id="app">
+    <!-- LAST 30 DAYS -->
+    <section class="card" id="last30Card">
+      <div class="sechead"><h3>Last 30 days</h3></div>
+      <p class="sub">Day by day — distance, pace, and time in the water. Gaps are rest days.</p>
+      <div class="grid2">
+        <div class="mini"><div class="minihd">Distance &amp; pace
+          <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#46cdbf;margin-right:3px;vertical-align:-1px"></i>m/day<i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#8fb8e0;margin:0 3px 0 9px;vertical-align:-1px"></i>/100m · faster ↑</span></div>
+          <div id="d30DistPace"></div></div>
+        <div class="mini"><div class="minihd">Time in water &amp; HR
+          <span><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#88a0b4;margin-right:3px;vertical-align:-1px"></i>min/day<i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#e8717a;margin:0 3px 0 9px;vertical-align:-1px"></i>avg HR</span></div>
+          <div id="d30Time"></div></div>
+      </div>
+    </section>
+
     <!-- HERO: THE BALANCE -->
     <section class="card" id="heroCard">
       <div class="sechead"><span class="n">01</span><h3>The balance</h3></div>
@@ -677,6 +695,72 @@ function renderFoot(swims){
     `Reads files locally; nothing leaves this device.`;
 }
 
+/* ---------- last 30 days (day-by-day) ---------- */
+function buildLast30(){
+  const now=new Date();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate()); // local midnight
+  const days=[];
+  for(let i=29;i>=0;i--){
+    const ds=new Date(today.getTime()-i*864e5), de=new Date(ds.getTime()+864e5);
+    const sw=SWIMS.filter(z=>z.date>=ds&&z.date<de);
+    let dist=0, secPure=0, secWater=0, hrNum=0, hrDen=0;
+    sw.forEach(z=>{dist+=z.dist; secPure+=z.totalSec;
+      const w=isFinite(z.woSec)?z.woSec:z.totalSec; secWater+=w;
+      if(isFinite(z.avgHr)){hrNum+=z.avgHr*w; hrDen+=w;}});  // HR weighted by time in water
+    days.push({date:ds, n:sw.length, dist, secPure, secWater,
+      pace: dist>0? secPure/dist*100 : NaN, min: secWater/60,
+      avgHr: hrDen>0? hrNum/hrDen : NaN});
+  }
+  return days;
+}
+function dayTip(d){
+  const head=`<b>${d.date.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})}</b>`;
+  if(!d.n)return head+"<br>rest day";
+  return head+`<br>${Math.round(d.dist)} m · ${fmtPace(d.pace)}/100m<br>`+
+    `${(d.secWater/60).toFixed(0)} min in water · ${d.n} swim${d.n>1?"s":""}`+
+    (isFinite(d.avgHr)?`<br>${Math.round(d.avgHr)} bpm avg`:"");
+}
+// Dual-axis day chart: `bar` series (left axis, bars from 0) + `line` series (right axis,
+// points + connecting line). Each = {pick, color, fmtY[, invert]}. invert puts lower values
+// at the top (used for pace, so faster reads up). The line series is optional/auto-skipped
+// when it has no finite values (e.g. no HR data loaded). Both charts share this 520x180
+// viewBox so they scale to equal height side by side.
+function renderDayDual(hostSel,days,bar,line){
+  const host=$(hostSel); host.innerHTML="";
+  const W=520,H=180,P={l:40,r:44,t:12,b:22};
+  const s=svg(W,H); host.appendChild(s);
+  const bvals=days.map(bar.pick).filter(isFinite);
+  if(!bvals.length){el("text",{x:W/2,y:H/2,fill:"#5c768c","font-size":11,"text-anchor":"middle","font-family":"var(--mono)"},s)
+    .textContent="no swims in range"; return;}
+  const bHi=Math.max(...bvals)*1.12||1, Yb=lin(0,bHi,H-P.b,P.t);
+  const lvals=days.map(line.pick).filter(isFinite), haveLine=lvals.length>0;
+  let lLo=0,lHi=1,Yl=()=>0;
+  if(haveLine){lLo=Math.min(...lvals); lHi=Math.max(...lvals); const pad=(lHi-lLo)*0.18||1; lLo-=pad; lHi+=pad;
+    Yl=line.invert? lin(lLo,lHi,P.t,H-P.b) : lin(lLo,lHi,H-P.b,P.t);}
+  const n=days.length, bw=(W-P.l-P.r)/n, X=i=>P.l+bw*(i+0.5);
+  [0,bHi].forEach(tv=>{el("line",{x1:P.l,y1:Yb(tv),x2:W-P.r,y2:Yb(tv),stroke:"#16314a"},s);
+    el("text",{x:P.l-5,y:Yb(tv)+3,fill:bar.color,"font-size":8.5,"text-anchor":"end","font-family":"var(--mono)"},s).textContent=bar.fmtY(tv);});
+  if(haveLine)[lLo,lHi].forEach(tv=>el("text",{x:W-P.r+5,y:Yl(tv)+3,fill:line.color,"font-size":8.5,"text-anchor":"start","font-family":"var(--mono)"},s).textContent=line.fmtY(tv));
+  const hook=(node,d)=>{node.style.cursor="pointer";
+    node.addEventListener("mousemove",e=>showTip(dayTip(d),e)); node.addEventListener("mouseleave",hideTip);};
+  days.forEach((d,i)=>{const v=bar.pick(d); if(!isFinite(v))return; const y=Yb(v);
+    hook(el("rect",{x:X(i)-bw*0.30,y,width:bw*0.6,height:Math.max(0,(H-P.b)-y),fill:bar.color,opacity:.8,rx:1.5},s),d);});
+  if(haveLine){let path=""; days.forEach((d,i)=>{const v=line.pick(d); if(!isFinite(v))return; path+=(path?"L":"M")+X(i)+" "+Yl(v);});
+    if(path)el("path",{d:path,fill:"none",stroke:line.color,"stroke-width":1.4,opacity:.5},s);
+    days.forEach((d,i)=>{const v=line.pick(d); if(!isFinite(v))return; hook(el("circle",{cx:X(i),cy:Yl(v),r:3,fill:line.color},s),d);});}
+  [0,n-1].forEach(i=>el("text",{x:X(i),y:H-7,fill:"#5c768c","font-size":8.5,"text-anchor":i===0?"start":"end","font-family":"var(--mono)"},s)
+    .textContent=days[i].date.toLocaleDateString(undefined,{month:"short",day:"numeric"}));
+}
+function renderLast30(){
+  const days=buildLast30();
+  renderDayDual("#d30DistPace",days,
+    {pick:d=>d.n?d.dist:NaN, color:"#46cdbf", fmtY:v=>Math.round(v)},
+    {pick:d=>(d.n&&isFinite(d.pace))?d.pace:NaN, color:"#8fb8e0", fmtY:v=>fmtPace(v), invert:true});
+  renderDayDual("#d30Time",days,
+    {pick:d=>d.n?d.min:NaN, color:"#88a0b4", fmtY:v=>Math.round(v)},
+    {pick:d=>isFinite(d.avgHr)?d.avgHr:NaN, color:"#e8717a", fmtY:v=>Math.round(v)});
+}
+
 /* ---------- compare two periods ---------- */
 function fmtISO(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function parseISO(s,end){const m=/(\d{4})-(\d{2})-(\d{2})/.exec(s||"");
@@ -875,7 +959,7 @@ function setupRange(){
 function build(){
   if(SWIMS.length<2){showError("Need at least two swims with lap data to chart trends."); return;}
   $("#empty").style.display="none"; $("#app").style.display="block";
-  renderVerdict(SWIMS); renderKPIs(SWIMS);
+  renderLast30(); renderVerdict(SWIMS); renderKPIs(SWIMS);
   renderScatter(SWIMS); renderTrendBalance(SWIMS); renderTrendPace(SWIMS);
   if(HASHR){$("#hrCard").style.display=""; renderEconomy(SWIMS);} else $("#hrCard").style.display="none";
   renderEfforts(SWIMS); fillSelector(SWIMS); renderSwimDetail(SWIMS[SWIMS.length-1]);
