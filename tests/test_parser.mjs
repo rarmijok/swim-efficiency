@@ -76,6 +76,10 @@ check(`median dps ~ ${expected.median_dps}`, Math.abs(median(dps) - expected.med
 const sumKeys = new Set(big.summaryRows.map(r => r.startDate.slice(0, 16)));
 const lapKeys = [...new Set(big.lapRows.map(r => r.workout_start))];
 check(`every lap swim has a summary row`, lapKeys.every(k => sumKeys.has(k)));
+// HR: each pool swim's workout carries a HeartRate WorkoutStatistics; the open-water
+// swim has none. The parser must read average HR off the workout (order-independent).
+const hrRows = big.summaryRows.filter(r => isFinite(+r.avgHeartRate) && +r.avgHeartRate > 0);
+check(`heart rate parsed for all ${expected.n_swims} pool swims`, hrRows.length === expected.n_swims);
 
 // chunk-boundary robustness: tiny chunks must give identical output
 const tiny = run(7);

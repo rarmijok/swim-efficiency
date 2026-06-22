@@ -42,6 +42,12 @@ load the whole file into memory.
   Distance is either a `totalDistance` attribute (older exports) or a child
   `<WorkoutStatistics type="HKQuantityTypeIdentifierDistanceSwimming" sum="1000" unit="m"/>` (iOS 16+).
   Pool length may appear as `<MetadataEntry key="HKMetadataKeyLapLength" value="25 m"/>`.
+- **Per-workout heart rate** is a child `<WorkoutStatistics type="HKQuantityTypeIdentifierHeartRate"
+  average="113.6" minimum="62" maximum="136" unit="count/min"/>` — read avg/min/max off that
+  attribute (exact type match, so HRV doesn't sneak in). This is the cheap HR source: **no need to
+  scan the millions of per-sample `<Record type="…HeartRate"/>` rows**, which the parser still skips.
+  `extract_workouts.py` writes `avgHeartRate`/`minHeartRate`/`maxHeartRate` into `swims.csv`; the
+  in-browser parser puts the same on its summary rows, so HR flows through the existing summary merge.
 - **Associating strokes to a swim**: a stroke record belongs to a workout if its start is
   within `[workout.start, workout.end)`. Open-water swims have no stroke records (skip them).
 - **Pool length** = lap-length metadata if present, else `total_distance / num_lengths`.
@@ -58,6 +64,9 @@ load the whole file into memory.
 - **pure-swim pace** /100m = `sum(length seconds) / distance * 100` (rest excluded)
 - **session pace** /100m = `workout duration / distance * 100` (rest included)
 - **speed** = `(spm/60) * DPS`  — the identity the whole tool is built around
+- **cardiac cost** (beats/100m) = `avg_HR/60 * pure-swim pace/100m` — **HR-economy: heartbeats spent
+  per 100 m. Lower = fitter/more efficient (faster and/or lower HR), not just "tried harder".** Needs
+  `swims.csv` (or the XML path) for HR; gated by the `HASHR` flag like rest% is by `SUMMARY`.
 - **CSS** (Critical Swim Speed) /100m = `(400m TT time − 200m TT time) / 2`
 
 ## What the analysis found (the "why" behind the tracker)
@@ -132,8 +141,18 @@ node tests/test_parser.mjs           # extracts the parser from swim_tracker.htm
      (SPM 21.1→19.6, DPS held 1.79, pure pace 2:39→2:50) with the verdict pinning the cause to
      falling turnover.
 
-There is **no remaining planned work** — both originally-scoped features are done. Future ideas
-live in the swimmer's head; ask before inventing scope.
+3. **Heart rate / effort & economy** — ✅ **DONE** (section 04 "Effort & economy" + HR everywhere).
+   Per-swim avg/max HR comes from the workout's HeartRate `WorkoutStatistics` (cheap; no per-sample
+   scan), flows through the summary merge (`HASHR` flag), and surfaces as: KPI tiles (avg HR,
+   beats/100m), a table column, an A/B comparison row, and the **economy trend** (beats/100m =
+   cardiac cost, lower=better). `extract_workouts.py` writes the HR columns so the CSV path has
+   parity with the XML path. Verified on real data: avg HR ~flat 2025→2026 (112→111) while
+   beats/100m **rose 298→316** — i.e. the slowdown is paid effort, not reduced effort.
+   - **Possible extension** (not built): per-length HR for within-swim cardiac drift in "Inside one
+     swim" — would require matching per-sample HR records to length windows (a second streaming pass).
+
+Beyond that there is **no remaining planned work**. Future ideas live in the swimmer's head; ask
+before inventing scope.
 
 ## Conventions & guardrails
 

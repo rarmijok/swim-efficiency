@@ -78,9 +78,11 @@ def make_swims():
             laps.append((st_, en_, strokes))
             clock = en_ + dt.timedelta(seconds=rng.uniform(0.5, 3.0))
         dur_min = (clock - day).total_seconds() / 60.0
+        hr = round(118.0 - k * 0.3 + rng.uniform(-4, 4), 1)   # gently drifting avg HR
         swims.append({"start": day, "end": clock, "laps": laps,
                       "dist": n * POOL, "dur": dur_min,
-                      "style_code": style_code, "dist_mode": dist_mode})
+                      "style_code": style_code, "dist_mode": dist_mode,
+                      "hr": hr, "hrmin": int(round(hr - 28)), "hrmax": int(round(hr + 22))})
         day += dt.timedelta(days=rng.choice([2, 2, 3, 4, 7]))
     return swims
 
@@ -189,6 +191,9 @@ def write_xml(swims):
             f'startDate="{fmt(sw["start"])}" endDate="{fmt(sw["end"])}">\r\n'
             f'  <MetadataEntry key="HKMetadataKeyLapLength" value="{POOL:g} m"/>\r\n'
             f'{distance_children(sw["dist"], sw["dist_mode"])}\r\n'
+            f'  <WorkoutStatistics type="HKQuantityTypeIdentifierHeartRate" '
+            f'startDate="{fmt(sw["start"])}" endDate="{fmt(sw["end"])}" '
+            f'average="{sw["hr"]:g}" minimum="{sw["hrmin"]}" maximum="{sw["hrmax"]}" unit="count/min"/>\r\n'
             f' </Workout>')
 
     # An open-water swim: Swimming workout but NO stroke records -> must be skipped.

@@ -33,6 +33,11 @@ def parse_workout(elem):
         "activeEnergy": elem.get("totalEnergyBurned", ""),
         "energyUnit": elem.get("totalEnergyBurnedUnit", ""),
         "sourceName": elem.get("sourceName", ""),
+        # Heart rate over the workout (from the HeartRate WorkoutStatistics child,
+        # iOS 16+). Cheap: an attribute read, no scanning of the per-sample records.
+        "avgHeartRate": "",
+        "minHeartRate": "",
+        "maxHeartRate": "",
     }
 
     # iOS 16+ moves distance/energy into child <WorkoutStatistics> elements
@@ -45,6 +50,16 @@ def parse_workout(elem):
         if "ActiveEnergyBurned" in stype and not row["activeEnergy"]:
             row["activeEnergy"] = stat.get("sum", "")
             row["energyUnit"] = stat.get("unit", "")
+        # Exact match so we don't pick up HeartRateVariabilitySDNN etc.
+        if stype == "HKQuantityTypeIdentifierHeartRate":
+            avg = stat.get("average", "")
+            try:
+                avg = str(round(float(avg), 1))
+            except (TypeError, ValueError):
+                pass
+            row["avgHeartRate"] = avg
+            row["minHeartRate"] = stat.get("minimum", "")
+            row["maxHeartRate"] = stat.get("maximum", "")
 
     return row
 
@@ -60,7 +75,7 @@ def main():
     fieldnames = [
         "activityType", "startDate", "endDate", "duration", "durationUnit",
         "totalDistance", "distanceUnit", "activeEnergy", "energyUnit",
-        "sourceName",
+        "sourceName", "avgHeartRate", "minHeartRate", "maxHeartRate",
     ]
 
     rows = []

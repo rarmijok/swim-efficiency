@@ -38,13 +38,19 @@ vanilla JS + SVG.
 | **Pure-swim pace** /100m | `Σ length seconds / distance × 100` | speed, rest excluded |
 | **Session pace** /100m | `workout duration / distance × 100` | speed, rest included |
 | **Speed** | `(SPM/60) × DPS` | the identity the whole tool is built around |
+| **Cardiac cost** | `avg HR/60 × pure pace/100m` | beats per 100 m — effort economy (lower is better) |
 | **CSS** (Critical Swim Speed) | `(400m TT − 200m TT) / 2` per 100m | sustainable race pace |
 
 The tracker's hero chart plots **SPM vs DPS** with a target zone and equal-pace contours, so
 you can see at a glance whether you're getting faster by spinning your arms quicker (raising
 turnover) or gliding farther per stroke (raising efficiency).
 
-It also lets you **compare any two periods** — pick two date ranges (or a preset like "2025 vs
+It also folds in **heart rate as effort** — per-swim avg/max HR plus a *cardiac cost* metric
+(**beats per 100 m**): fewer beats to cover the same distance means you got fitter or more
+efficient, not just that you worked harder. This is what separates "faster because I improved"
+from "faster because I pushed."
+
+And it lets you **compare any two periods** — pick two date ranges (or a preset like "2025 vs
 2026" or "last 8 weeks vs prior 8 weeks") and see a side-by-side metric strip, a plain-English
 verdict, and a two-color scatter with an arrow showing exactly how your stroke drifted between them.
 

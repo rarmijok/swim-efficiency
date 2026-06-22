@@ -11,6 +11,7 @@
     --rate:#f4a259;   /* stroke rate — the lever to raise */
     --len:#46cdbf;    /* distance per stroke — hold this */
     --pace:#8fb8e0;   /* pace */
+    --hr:#e8717a;     /* heart rate / effort */
     --good:#6fcf97; --warn:#f2c14e; --bad:#ec6f6f;
     --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
@@ -255,9 +256,23 @@
       </div>
     </section>
 
+    <!-- EFFORT & ECONOMY -->
+    <section class="card" id="hrCard">
+      <div class="sechead"><span class="n">04</span><h3>Effort &amp; economy</h3></div>
+      <p class="sub">Heart rate is the effort behind the pace.
+        <b style="color:var(--hr)">Beats per 100&nbsp;m</b> is the cardiac cost of your speed —
+        fewer beats to cover the same distance means you got fitter or more efficient, not just that
+        you worked harder. Lower is better (trailing-10 median).</p>
+      <div id="trendEconomy"></div>
+      <div class="legend">
+        <span><i style="background:var(--hr)"></i>beats / 100m (cardiac cost)</span>
+        <span><i style="background:#5c768c"></i>avg heart rate</span>
+      </div>
+    </section>
+
     <!-- BEST EFFORTS -->
     <section class="card">
-      <div class="sechead"><span class="n">04</span><h3>Best efforts</h3></div>
+      <div class="sechead"><span class="n">05</span><h3>Best efforts</h3></div>
       <p class="sub">Fastest stretches of continuous swimming on record (pure pace per 100m).
         <span id="cssNote"></span></p>
       <div class="efforts" id="efforts"></div>
@@ -265,7 +280,7 @@
 
     <!-- SWIM DETAIL -->
     <section class="card">
-      <div class="sechead"><span class="n">05</span><h3>Inside one swim</h3></div>
+      <div class="sechead"><span class="n">06</span><h3>Inside one swim</h3></div>
       <p class="sub">Length-by-length. Use this to check a tempo set: did your rate rise without your length collapsing?</p>
       <div style="margin-bottom:12px"><select id="swimSel"></select></div>
       <div id="swimDetail"></div>
@@ -278,7 +293,7 @@
 
     <!-- COMPARE PERIODS -->
     <section class="card" id="compareCard">
-      <div class="sechead"><span class="n">06</span><h3>Compare two periods</h3></div>
+      <div class="sechead"><span class="n">07</span><h3>Compare two periods</h3></div>
       <p class="sub">Pick any two stretches of time and see how your stroke moved between them.
         The arrow on the chart is the headline: which way did turnover and length drift?</p>
       <div class="cmpbar">
@@ -304,7 +319,7 @@
 
     <!-- TABLE -->
     <section class="card">
-      <div class="sechead"><span class="n">07</span><h3>Recent swims</h3></div>
+      <div class="sechead"><span class="n">08</span><h3>Recent swims</h3></div>
       <div style="overflow-x:auto"><table id="tbl"></table></div>
     </section>
 
@@ -402,7 +417,7 @@ function showTip(html,evt){tip.innerHTML=html; tip.style.opacity=1;
 function hideTip(){tip.style.opacity=0;}
 
 /* ---------- state ---------- */
-let SWIMS=[], SUMMARY=null, CMP_PRESETS=[];
+let SWIMS=[], SUMMARY=null, HASHR=false, CMP_PRESETS=[];
 const sign=d=>d>0?"+":"";
 
 /* ---------- renderers ---------- */
@@ -503,6 +518,38 @@ function renderTrendPace(swims){
   el("text",{x:P.l+4,y:P.t+4,fill:"#5c768c","font-size":9,"font-family":"var(--mono)"},s).textContent="faster ↑";
 }
 
+function renderEconomy(swims){
+  const host=$("#trendEconomy"); host.innerHTML="";
+  const W=820,H=300,P={l:50,r:50,t:16,b:30};
+  const s=svg(W,H); host.appendChild(s);
+  const rb=rolling(swims,"beats100"), rh=rolling(swims,"avgHr");
+  const bv=rb.map(p=>p.v).filter(isFinite), hv=rh.map(p=>p.v).filter(isFinite);
+  if(!bv.length){el("text",{x:W/2,y:H/2,fill:"#5c768c","font-size":13,"text-anchor":"middle","font-family":"var(--mono)"},s)
+    .textContent="No heart-rate data in this range."; return;}
+  const t0=swims[0].date,t1=swims[swims.length-1].date; const X=lin(t0,t1,P.l,W-P.r);
+  const Yb=lin(Math.min(...bv)-4,Math.max(...bv)+4,P.t,H-P.b);  // inverted: lower cost = up
+  const Yh=lin(Math.min(...hv)-3,Math.max(...hv)+3,H-P.b,P.t);  // higher bpm = up
+  // gridlines on the beats/100m (economy) axis
+  const lo=Math.floor(Math.min(...bv)/10)*10, hi=Math.ceil(Math.max(...bv)/10)*10;
+  for(let v=lo;v<=hi;v+=10){el("line",{x1:P.l,y1:Yb(v),x2:W-P.r,y2:Yb(v),stroke:"#16314a"},s);
+    el("text",{x:P.l-6,y:Yb(v)+3,fill:"#5c768c","font-size":9.5,"text-anchor":"end","font-family":"var(--mono)"},s).textContent=v;}
+  [0,.5,1].forEach(f=>{const d=new Date(t0.getTime()+f*(t1-t0));
+    el("text",{x:X(d),y:H-10,fill:"#5c768c","font-size":9.5,"text-anchor":"middle","font-family":"var(--mono)"},s)
+      .textContent=d.toLocaleDateString(undefined,{month:"short",year:"2-digit"});});
+  const path=(pts,Yf,col,dash)=>{let d="";pts.forEach(p=>{if(!isFinite(p.v))return; d+=(d?"L":"M")+X(p.date)+" "+Yf(p.v);});
+    el("path",Object.assign({d,fill:"none",stroke:col,"stroke-width":2.4,"stroke-linejoin":"round"},dash?{"stroke-dasharray":"4 3","stroke-width":1.8}:{}),s);};
+  path(rh,Yh,"#5c768c",true);          // avg HR (secondary, faint dashed)
+  path(rb,Yb,"#e8717a",false);         // beats/100m (primary)
+  // axis labels
+  el("text",{x:P.l-6,y:P.t+8,fill:"#e8717a","font-size":9.5,"text-anchor":"end","font-family":"var(--mono)"},s).textContent="b/100m";
+  el("text",{x:W-P.r+6,y:P.t+8,fill:"#88a0b4","font-size":9.5,"text-anchor":"start","font-family":"var(--mono)"},s).textContent="bpm";
+  el("text",{x:P.l+4,y:H-P.b-4,fill:"#5c768c","font-size":9,"font-family":"var(--mono)"},s).textContent="more economical ↑";
+  // endpoint values
+  const lb=rb.filter(p=>isFinite(p.v)).pop(), lh=rh.filter(p=>isFinite(p.v)).pop();
+  if(lb)el("text",{x:W-P.r-2,y:Yb(lb.v)-6,fill:"#e8717a","font-size":11,"text-anchor":"end","font-family":"var(--mono)"},s).textContent=Math.round(lb.v);
+  if(lh)el("text",{x:W-P.r-2,y:Yh(lh.v)+14,fill:"#88a0b4","font-size":11,"text-anchor":"end","font-family":"var(--mono)"},s).textContent=Math.round(lh.v)+" bpm";
+}
+
 function renderSwimDetail(swim){
   const host=$("#swimDetail"); host.innerHTML="";
   const W=820,H=300,P={l:48,r:46,t:16,b:30};
@@ -539,14 +586,19 @@ function renderKPIs(swims){
     {l:"dist / stroke",f:"dps",fmt:v=>v.toFixed(2)+"m",better:"up"},
     {l:"SWOLF",f:"swolf",fmt:v=>v.toFixed(0),better:"down"},
   ];
+  if(HASHR)cards.push(
+    {l:"avg HR",f:"avgHr",fmt:v=>Math.round(v)+" bpm",better:null},
+    {l:"beats / 100m",f:"beats100",fmt:v=>Math.round(v),better:"down"});
   let html="";
   cards.forEach(c=>{const now=m(recent,c.f),was=m(prev,c.f);
     let d="",cls="flat";
     if(isFinite(was)&&isFinite(now)){const diff=now-was;
-      const improve=(c.better==="down")?diff<0:diff>0;
-      cls=Math.abs(diff)<1e-6?"flat":(improve?"up":"down");
-      const sign=diff>0?"+":"";
-      const dv=(c.f==="pace100")?(sign+Math.round(diff)+"s"):(sign+diff.toFixed(c.f==="dps"?2:1));
+      const improve=c.better===null?null:((c.better==="down")?diff<0:diff>0);
+      cls=Math.abs(diff)<1e-6?"flat":(improve===null?"flat":(improve?"up":"down"));
+      const sg=diff>0?"+":"";
+      const dv=(c.f==="pace100")?(sg+Math.round(diff)+"s"):
+               (c.f==="avgHr"||c.f==="beats100")?(sg+Math.round(diff)):
+               (sg+diff.toFixed(c.f==="dps"?2:1));
       d=dv+" vs prior 10";}
     html+=`<div class="kpi"><div class="l">${c.l}</div>
       <div class="v">${isFinite(now)?c.fmt(now):"–"}</div>
@@ -606,12 +658,14 @@ function renderTable(swims){
   const rows=swims.slice(-12).reverse();
   const cell=(v,good)=>`<td style="color:${good===null?"var(--ink)":good?"var(--good)":"var(--warn)"}">${v}</td>`;
   let h=`<thead><tr><th class="date">Date</th><th>Dist</th><th>Pace/100</th>`+
-    `<th>spm</th><th>m/str</th><th>SWOLF</th></tr></thead><tbody>`;
+    `<th>spm</th><th>m/str</th><th>SWOLF</th>${HASHR?"<th>HR</th>":""}</tr></thead><tbody>`;
   rows.forEach(z=>{h+=`<tr><td class="date">${fmtDate(z.date)}</td>`+
     `<td>${Math.round(z.dist)}</td><td>${fmtPace(z.pace100)}</td>`+
     cell(z.spm.toFixed(1), z.spm>=TARGET_SPM[0]?true:(z.spm>=20?null:false))+
     cell(z.dps.toFixed(2), z.dps>=HOLD_DPS-0.05?true:null)+
-    `<td>${z.swolf.toFixed(0)}</td></tr>`;});
+    `<td>${z.swolf.toFixed(0)}</td>`+
+    (HASHR?`<td style="color:var(--hr)">${isFinite(z.avgHr)?Math.round(z.avgHr):"–"}</td>`:"")+
+    `</tr>`;});
   $("#tbl").innerHTML=h+"</tbody>";
 }
 
@@ -631,7 +685,8 @@ function swimsInRange(fromStr,toStr){const f=parseISO(fromStr,false),t=parseISO(
   if(!f||!t)return []; return SWIMS.filter(z=>z.date>=f&&z.date<=t);}
 function periodStats(sw){if(!sw.length)return null; const m=f=>med(sw.map(z=>z[f]).filter(isFinite));
   return {n:sw.length, km:sw.reduce((a,z)=>a+z.dist,0)/1000, spm:m("spm"), dps:m("dps"),
-    pace100:m("pace100"), swolf:m("swolf"), woPace:SUMMARY?m("woPace"):NaN, rest:SUMMARY?m("restFrac")*100:NaN};}
+    pace100:m("pace100"), swolf:m("swolf"), woPace:SUMMARY?m("woPace"):NaN, rest:SUMMARY?m("restFrac")*100:NaN,
+    avgHr:HASHR?m("avgHr"):NaN, beats100:HASHR?m("beats100"):NaN};}
 
 // metric rows for the comparison strip. dir: +1 higher-is-better, -1 lower-is-better, 0 neutral.
 function cmpRows(){
@@ -646,6 +701,9 @@ function cmpRows(){
   if(SUMMARY)rows.push(
     {l:"session pace /100m", get:s=>s.woPace, fmt:v=>fmtPace(v), dir:-1, eps:0.5, dfmt:d=>sign(d)+Math.round(d)+"s"},
     {l:"rest / session", get:s=>s.rest, fmt:v=>v.toFixed(0)+"%", dir:0, dfmt:d=>sign(d)+d.toFixed(0)+"%"});
+  if(HASHR)rows.push(
+    {l:"avg HR", get:s=>s.avgHr, fmt:v=>Math.round(v)+" bpm", dir:0, dfmt:d=>sign(d)+Math.round(d)},
+    {l:"beats / 100m", get:s=>s.beats100, fmt:v=>Math.round(v), dir:-1, eps:2, dfmt:d=>sign(d)+Math.round(d)});
   return rows;
 }
 
@@ -779,15 +837,19 @@ function buildCompare(){
 function applySummary(rows){
   const byKey={};
   rows.forEach(r=>{const ts=(r.startDate||"").slice(0,16).replace("T"," ");
-    const dur=+r.duration; if(isFinite(dur))byKey[ts]=dur*60;});
-  let matched=0;
-  SWIMS.forEach(s=>{const woSec=byKey[s.key];
-    if(isFinite(woSec)&&woSec>0){matched++; s.woSec=woSec;
-      s.woPace=woSec/s.dist*100; s.restFrac=Math.max(0,(woSec-s.totalSec)/woSec);}});
+    const dur=+r.duration; if(isFinite(dur))byKey[ts]={woSec:dur*60, avgHr:+r.avgHeartRate, maxHr:+r.maxHeartRate};});
+  let matched=0, hrMatched=0;
+  SWIMS.forEach(s=>{const e=byKey[s.key]; if(!e)return;
+    if(isFinite(e.woSec)&&e.woSec>0){matched++; s.woSec=e.woSec;
+      s.woPace=e.woSec/s.dist*100; s.restFrac=Math.max(0,(e.woSec-s.totalSec)/e.woSec);}
+    if(isFinite(e.avgHr)&&e.avgHr>0){hrMatched++; s.avgHr=e.avgHr; s.maxHr=e.maxHr;
+      // cardiac cost: heartbeats spent per 100 m of swimming (lower = more economical)
+      if(isFinite(s.pace100))s.beats100=e.avgHr/60*s.pace100;}});
   if(matched){SUMMARY=true;
     $("#paceSub").textContent="Pure swimming pace (rest excluded) vs full session pace — the gap is rest.";
     $("#paceLegend").innerHTML=`<span><i style="background:var(--pace)"></i>pure-swim pace</span>`+
       `<span><i style="background:#5c768c"></i>session pace (incl. rest)</span>`;}
+  if(hrMatched)HASHR=true;
 }
 
 /* ---------- swim selector ---------- */
@@ -816,6 +878,7 @@ function build(){
   $("#empty").style.display="none"; $("#app").style.display="block";
   renderVerdict(SWIMS); renderKPIs(SWIMS);
   renderScatter(SWIMS); renderTrendBalance(SWIMS); renderTrendPace(SWIMS);
+  if(HASHR){$("#hrCard").style.display=""; renderEconomy(SWIMS);} else $("#hrCard").style.display="none";
   renderEfforts(SWIMS); fillSelector(SWIMS); renderSwimDetail(SWIMS[SWIMS.length-1]);
   buildCompare(); renderTable(SWIMS); renderFoot(SWIMS);
 }
@@ -914,9 +977,19 @@ function makeHealthParser() {
           let lapLen = null;
           const lm = block.match(/LapLength"\s+value="([\d.]+)/);
           if (lm) lapLen = +lm[1];
+          // Heart rate over the workout, from the HeartRate WorkoutStatistics child.
+          let avgHr = null, maxHr = null;
+          const hrm = block.match(/<WorkoutStatistics\b[^>]*type="HKQuantityTypeIdentifierHeartRate"[^>]*\/?>/);
+          if (hrm) {
+            const av = hrm[0].match(/\baverage="([\d.]+)"/);
+            const mx = hrm[0].match(/\bmaximum="([\d.]+)"/);
+            if (av) avgHr = +av[1];
+            if (mx) maxHr = +mx[1];
+          }
           workouts.push({
             start: a.startDate, end: a.endDate, dist, lapLen,
-            dur: a.duration ? +a.duration : null, source: a.sourceName || ""
+            dur: a.duration ? +a.duration : null, source: a.sourceName || "",
+            avgHr, maxHr
           });
         }
         i = endIdx;
@@ -977,7 +1050,8 @@ function buildLapRows(strokes, workouts) {
     });
   }
   const summaryRows = W.filter(w => w.dur != null).map(w => ({
-    startDate: w.start, duration: w.dur, totalDistance: w.dist
+    startDate: w.start, duration: w.dur, totalDistance: w.dist,
+    avgHeartRate: w.avgHr != null ? w.avgHr : "", maxHeartRate: w.maxHr != null ? w.maxHr : ""
   }));
   return { lapRows, summaryRows };
 }
@@ -1055,6 +1129,7 @@ async function ingest(files) {
 }
 function finish(lapRows,sumRows){
   if(!lapRows){showError("No lap-level file found. Drop swim_laps.csv (the one with stroke counts per length)."); return;}
+  SUMMARY=null; HASHR=false;          // reset so a re-drop doesn't keep stale summary/HR flags
   SWIMS=aggregate(lapRows);
   if(sumRows)applySummary(sumRows);
   setupRange();
