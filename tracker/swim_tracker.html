@@ -113,6 +113,33 @@
   select{font-family:var(--mono); font-size:12px; background:#0c2233; color:var(--ink);
     border:1px solid var(--hair); border-radius:8px; padding:7px 10px}
 
+  /* compare two periods */
+  .cmpbar{display:flex; flex-wrap:wrap; gap:14px 22px; align-items:flex-end; margin-bottom:18px}
+  .cmpfield{display:flex; flex-direction:column; gap:6px; font-family:var(--mono);
+    font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint)}
+  .cmpranges{display:flex; flex-wrap:wrap; gap:10px}
+  .cmprange{display:flex; align-items:center; gap:7px; background:#0c2233;
+    border:1px solid var(--hair); border-radius:8px; padding:6px 10px}
+  .cmprange.cmpA{border-left:3px solid var(--pace)}
+  .cmprange.cmpB{border-left:3px solid var(--rate)}
+  .cmptag{font-family:var(--mono); font-size:12px; font-weight:600; width:13px; text-align:center}
+  .cmpA .cmptag{color:var(--pace)} .cmpB .cmptag{color:var(--rate)}
+  .cmpdash{color:var(--faint); font-size:11px}
+  .cmprange input[type=date]{font-family:var(--mono); font-size:12px; color:var(--ink);
+    background:transparent; border:none; padding:2px}
+  .cmprange input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.7); cursor:pointer}
+  .cmpstrip{display:grid; grid-template-columns:1.5fr 1fr 1fr 1fr; gap:1px;
+    background:var(--hair); border:1px solid var(--hair); border-radius:12px;
+    overflow:hidden; margin-bottom:16px}
+  .cmpstrip>div{background:linear-gradient(180deg,#112940,#0e2233); padding:9px 13px;
+    font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:13px}
+  .cmpstrip .ch{font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint)}
+  .cmpstrip .cl{color:var(--muted); font-size:11.5px; letter-spacing:.03em}
+  .cmpstrip .ca{color:var(--pace)} .cmpstrip .cb{color:var(--rate)}
+  .cmpstrip .right{text-align:right}
+  .cmpverdict{font-size:14.5px; line-height:1.55; margin-bottom:16px; color:var(--ink)}
+  .cmpverdict b{color:var(--rate)}
+
   /* best efforts */
   .efforts{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px}
   .eff{background:#0c2233; border:1px solid var(--hair); border-radius:11px; padding:15px}
@@ -249,9 +276,35 @@
       </div>
     </section>
 
+    <!-- COMPARE PERIODS -->
+    <section class="card" id="compareCard">
+      <div class="sechead"><span class="n">06</span><h3>Compare two periods</h3></div>
+      <p class="sub">Pick any two stretches of time and see how your stroke moved between them.
+        The arrow on the chart is the headline: which way did turnover and length drift?</p>
+      <div class="cmpbar">
+        <label class="cmpfield">Preset
+          <select id="cmpPreset"></select>
+        </label>
+        <div class="cmpranges">
+          <div class="cmprange cmpA"><span class="cmptag">A</span>
+            <input type="date" id="aFrom"><span class="cmpdash">→</span><input type="date" id="aTo"></div>
+          <div class="cmprange cmpB"><span class="cmptag">B</span>
+            <input type="date" id="bFrom"><span class="cmpdash">→</span><input type="date" id="bTo"></div>
+        </div>
+      </div>
+      <div id="cmpStrip" class="cmpstrip"></div>
+      <div id="cmpVerdict" class="cmpverdict"></div>
+      <div id="cmpScatter"></div>
+      <div class="legend">
+        <span><i style="background:var(--pace)"></i>period A</span>
+        <span><i style="background:var(--rate)"></i>period B</span>
+        <span style="color:var(--faint)">○ = period median · arrow = A → B move · box = target zone</span>
+      </div>
+    </section>
+
     <!-- TABLE -->
     <section class="card">
-      <div class="sechead"><span class="n">06</span><h3>Recent swims</h3></div>
+      <div class="sechead"><span class="n">07</span><h3>Recent swims</h3></div>
       <div style="overflow-x:auto"><table id="tbl"></table></div>
     </section>
 
@@ -349,7 +402,8 @@ function showTip(html,evt){tip.innerHTML=html; tip.style.opacity=1;
 function hideTip(){tip.style.opacity=0;}
 
 /* ---------- state ---------- */
-let SWIMS=[], SUMMARY=null;
+let SWIMS=[], SUMMARY=null, CMP_PRESETS=[];
+const sign=d=>d>0?"+":"";
 
 /* ---------- renderers ---------- */
 function renderScatter(swims){
@@ -569,6 +623,158 @@ function renderFoot(swims){
     `Reads files locally; nothing leaves this device.`;
 }
 
+/* ---------- compare two periods ---------- */
+function fmtISO(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
+function parseISO(s,end){const m=/(\d{4})-(\d{2})-(\d{2})/.exec(s||"");
+  if(!m)return null; return end?new Date(+m[1],+m[2]-1,+m[3],23,59,59,999):new Date(+m[1],+m[2]-1,+m[3]);}
+function swimsInRange(fromStr,toStr){const f=parseISO(fromStr,false),t=parseISO(toStr,true);
+  if(!f||!t)return []; return SWIMS.filter(z=>z.date>=f&&z.date<=t);}
+function periodStats(sw){if(!sw.length)return null; const m=f=>med(sw.map(z=>z[f]).filter(isFinite));
+  return {n:sw.length, km:sw.reduce((a,z)=>a+z.dist,0)/1000, spm:m("spm"), dps:m("dps"),
+    pace100:m("pace100"), swolf:m("swolf"), woPace:SUMMARY?m("woPace"):NaN, rest:SUMMARY?m("restFrac")*100:NaN};}
+
+// metric rows for the comparison strip. dir: +1 higher-is-better, -1 lower-is-better, 0 neutral.
+function cmpRows(){
+  const rows=[
+    {l:"swims", get:s=>s.n, fmt:v=>String(v), dir:0, dfmt:d=>sign(d)+d},
+    {l:"distance", get:s=>s.km, fmt:v=>v.toFixed(1)+" km", dir:0, dfmt:d=>sign(d)+d.toFixed(1)},
+    {l:"strokes / min", get:s=>s.spm, fmt:v=>v.toFixed(1), dir:1, eps:0.05, dfmt:d=>sign(d)+d.toFixed(1)},
+    {l:"dist / stroke", get:s=>s.dps, fmt:v=>v.toFixed(2)+" m", dir:1, eps:0.005, dfmt:d=>sign(d)+d.toFixed(2)},
+    {l:"pure pace /100m", get:s=>s.pace100, fmt:v=>fmtPace(v), dir:-1, eps:0.5, dfmt:d=>sign(d)+Math.round(d)+"s"},
+    {l:"SWOLF", get:s=>s.swolf, fmt:v=>v.toFixed(0), dir:-1, eps:0.5, dfmt:d=>sign(d)+d.toFixed(0)},
+  ];
+  if(SUMMARY)rows.push(
+    {l:"session pace /100m", get:s=>s.woPace, fmt:v=>fmtPace(v), dir:-1, eps:0.5, dfmt:d=>sign(d)+Math.round(d)+"s"},
+    {l:"rest / session", get:s=>s.rest, fmt:v=>v.toFixed(0)+"%", dir:0, dfmt:d=>sign(d)+d.toFixed(0)+"%"});
+  return rows;
+}
+
+function renderCmpStrip(sa,sb){
+  let h=`<div class="cl">metric</div><div class="ch right ca">A</div>`+
+        `<div class="ch right cb">B</div><div class="ch right">Δ</div>`;
+  cmpRows().forEach(r=>{
+    const av=sa?r.get(sa):NaN, bv=sb?r.get(sb):NaN;
+    h+=`<div class="cl">${r.l}</div>`;
+    h+=`<div class="right">${isFinite(av)?r.fmt(av):"–"}</div>`;
+    h+=`<div class="right">${isFinite(bv)?r.fmt(bv):"–"}</div>`;
+    let cell="–", cls="flat";
+    if(isFinite(av)&&isFinite(bv)){const d=bv-av;
+      if(r.dir!==0){const improve=r.dir>0?d>0:d<0; cls=Math.abs(d)<=(r.eps||0)?"flat":(improve?"up":"down");}
+      cell=r.dfmt(d);}
+    h+=`<div class="right ${cls}">${cell}</div>`;
+  });
+  $("#cmpStrip").innerHTML=h;
+}
+
+function renderCmpVerdict(sa,sb){
+  const host=$("#cmpVerdict");
+  if(!sa||!sb){host.innerHTML=(!sa&&!sb)?"Pick two date ranges that contain swims.":
+    `Period <b style="color:var(--${sa?'rate':'pace'})">${sa?'B':'A'}</b> has no swims in that range — widen it.`;
+    return;}
+  const dSpm=sb.spm-sa.spm, dDps=sb.dps-sa.dps, dPace=sb.pace100-sa.pace100;
+  const rate=Math.abs(dSpm)<0.3?`turnover held near <b>${sb.spm.toFixed(1)} spm</b>`:
+    dSpm>0?`turnover rose <b>${dSpm.toFixed(1)}</b> to ${sb.spm.toFixed(1)} spm`:
+           `turnover fell <b>${(-dSpm).toFixed(1)}</b> to ${sb.spm.toFixed(1)} spm`;
+  const len=Math.abs(dDps)<0.02?`stroke length held at ${sb.dps.toFixed(2)} m`:
+    dDps>0?`length grew ${dDps.toFixed(2)} to ${sb.dps.toFixed(2)} m`:
+           `length dropped ${(-dDps).toFixed(2)} to ${sb.dps.toFixed(2)} m`;
+  const pace=Math.abs(dPace)<2?`pure pace was about flat (${fmtPace(sb.pace100)}/100m)`:
+    dPace<0?`pure pace improved ${Math.round(-dPace)}s to ${fmtPace(sb.pace100)}/100m`:
+            `pure pace slipped ${Math.round(dPace)}s to ${fmtPace(sb.pace100)}/100m`;
+  let driver="";
+  if(dPace<-2)driver=dSpm>0.3?" Speed came from turnover — exactly the lever to keep pushing.":
+    (dDps>0.02?" Speed came from a longer stroke.":"");
+  else if(dPace>2)driver=dSpm<-0.3?" The slowdown tracks falling turnover — that's the brake to release.":
+    (dDps<-0.02?" The slowdown tracks a shortening stroke.":"");
+  host.innerHTML=`From <b style="color:var(--pace)">A</b> to <b style="color:var(--rate)">B</b>: `+
+    `${rate}, ${len} — ${pace}.${driver}`;
+}
+
+function cmpCentroid(s,c,color,tag){
+  el("circle",{cx:c.x,cy:c.y,r:8,fill:"none",stroke:color,"stroke-width":2.5},s);
+  el("circle",{cx:c.x,cy:c.y,r:2.5,fill:color},s);
+  el("text",{x:c.x,y:c.y-12,fill:color,"font-size":11,"font-weight":600,"text-anchor":"middle","font-family":"var(--mono)"},s).textContent=tag;
+}
+function cmpArrow(s,a,b){
+  const dx=b.x-a.x,dy=b.y-a.y,L=Math.hypot(dx,dy); if(L<1)return; const ux=dx/L,uy=dy/L;
+  const a2={x:a.x+ux*9,y:a.y+uy*9}, b2={x:b.x-ux*11,y:b.y-uy*11};
+  el("line",{x1:a2.x,y1:a2.y,x2:b2.x,y2:b2.y,stroke:"#e9f2fa","stroke-width":2,opacity:.85},s);
+  const ah=9,aw=4.5, base={x:b2.x-ux*ah,y:b2.y-uy*ah}, px=-uy,py=ux;
+  el("polygon",{points:`${b2.x},${b2.y} ${base.x+px*aw},${base.y+py*aw} ${base.x-px*aw},${base.y-py*aw}`,
+    fill:"#e9f2fa",opacity:.9},s);
+}
+
+function renderCompareScatter(a,b,sa,sb){
+  const host=$("#cmpScatter"); host.innerHTML="";
+  const W=820,H=420,P={l:54,r:18,t:18,b:46};
+  const s=svg(W,H); host.appendChild(s);
+  const all=a.concat(b).filter(z=>isFinite(z.spm)&&isFinite(z.dps));
+  if(!all.length){el("text",{x:W/2,y:H/2,fill:"#5c768c","font-size":13,"text-anchor":"middle","font-family":"var(--mono)"},s)
+    .textContent="No swims in either range."; return;}
+  const xs=all.map(z=>z.spm), ys=all.map(z=>z.dps);
+  const xMin=Math.min(17,Math.floor(Math.min(...xs))-1), xMax=Math.max(26,Math.ceil(Math.max(...xs))+1);
+  const yMin=Math.min(1.3,Math.min(...ys)-.1), yMax=Math.max(2.1,Math.max(...ys)+.1);
+  const X=lin(xMin,xMax,P.l,W-P.r), Y=lin(yMin,yMax,H-P.b,P.t);
+  for(let v=Math.ceil(xMin);v<=xMax;v++){el("line",{x1:X(v),y1:P.t,x2:X(v),y2:H-P.b,stroke:"#16314a"},s);
+    el("text",{x:X(v),y:H-P.b+16,fill:"#5c768c","font-size":10,"text-anchor":"middle","font-family":"var(--mono)"},s).textContent=v;}
+  for(let v=Math.ceil(yMin*10)/10;v<=yMax;v=Math.round((v+0.1)*10)/10){el("line",{x1:P.l,y1:Y(v),x2:W-P.r,y2:Y(v),stroke:"#16314a"},s);
+    el("text",{x:P.l-8,y:Y(v)+3,fill:"#5c768c","font-size":10,"text-anchor":"end","font-family":"var(--mono)"},s).textContent=v.toFixed(1);}
+  el("text",{x:(P.l+W-P.r)/2,y:H-8,fill:"#88a0b4","font-size":11,"text-anchor":"middle","font-family":"var(--mono)"},s).textContent="STROKES / MIN  →  raise this";
+  el("text",{x:16,y:(P.t+H-P.b)/2,fill:"#88a0b4","font-size":11,"text-anchor":"middle","font-family":"var(--mono)",transform:`rotate(-90 16 ${(P.t+H-P.b)/2})`},s)
+    .textContent="DISTANCE / STROKE (m)  →  hold this";
+  [140,150,160,170,180].forEach(pc=>{let d="";for(let v=xMin;v<=xMax;v+=0.5){const dps=6000/(pc*v);
+    if(dps<yMin||dps>yMax)continue; d+=(d?"L":"M")+X(v)+" "+Y(dps);} if(d)el("path",{d,fill:"none",stroke:"#2c4a66","stroke-width":1,"stroke-dasharray":"3 4"},s);});
+  el("rect",{x:X(TARGET_SPM[0]),y:Y(TARGET_DPS[1]),width:X(TARGET_SPM[1])-X(TARGET_SPM[0]),
+    height:Y(TARGET_DPS[0])-Y(TARGET_DPS[1]),fill:"#46cdbf",opacity:.10,stroke:"#46cdbf","stroke-opacity":.35,rx:4},s);
+  const plot=(grp,color,tag)=>grp.forEach(z=>{if(!isFinite(z.spm)||!isFinite(z.dps))return;
+    const c=el("circle",{cx:X(z.spm),cy:Y(z.dps),r:4,fill:color,opacity:.5,class:"pt"},s);
+    c.addEventListener("mousemove",e=>showTip(`<b>${fmtDate(z.date)}</b> · period ${tag}<br>`+
+      `${Math.round(z.dist)} m · ${fmtPace(z.pace100)}/100m<br>${z.spm.toFixed(1)} spm · ${z.dps.toFixed(2)} m/str`,e));
+    c.addEventListener("mouseleave",hideTip);});
+  plot(a,"#8fb8e0","A"); plot(b,"#f4a259","B");
+  const ca=sa&&isFinite(sa.spm)&&isFinite(sa.dps)?{x:X(sa.spm),y:Y(sa.dps)}:null;
+  const cb=sb&&isFinite(sb.spm)&&isFinite(sb.dps)?{x:X(sb.spm),y:Y(sb.dps)}:null;
+  if(ca&&cb)cmpArrow(s,ca,cb);
+  if(ca)cmpCentroid(s,ca,"#8fb8e0","A");
+  if(cb)cmpCentroid(s,cb,"#f4a259","B");
+}
+
+function renderCompare(){
+  const a=swimsInRange($("#aFrom").value,$("#aTo").value);
+  const b=swimsInRange($("#bFrom").value,$("#bTo").value);
+  const sa=periodStats(a), sb=periodStats(b);
+  renderCmpStrip(sa,sb); renderCmpVerdict(sa,sb); renderCompareScatter(a,b,sa,sb);
+}
+
+function computePresets(){
+  const ds=SWIMS.map(z=>z.date), min=ds[0], max=ds[ds.length-1], day=864e5, out=[];
+  const yrs=[...new Set(SWIMS.map(z=>z.date.getFullYear()))].sort();
+  for(let i=0;i<yrs.length-1;i++){const y1=yrs[i],y2=yrs[i+1];
+    out.push({label:`${y1} vs ${y2}`, a:[new Date(y1,0,1),new Date(y1,11,31)],
+      b:[new Date(y2,0,1),new Date(y2,11,31)], isDefault:i===yrs.length-2});}
+  out.push({label:"Last 8 weeks vs prior 8 weeks",
+    a:[new Date(+max-112*day),new Date(+max-56*day)], b:[new Date(+max-56*day),new Date(+max)]});
+  out.push({label:"Last 90 days vs prior 90 days",
+    a:[new Date(+max-180*day),new Date(+max-90*day)], b:[new Date(+max-90*day),new Date(+max)]});
+  out.push({label:"First half vs second half",
+    a:[min,new Date((+min+ +max)/2)], b:[new Date((+min+ +max)/2),max]});
+  if(!out.some(p=>p.isDefault))out[0].isDefault=true;
+  return out;
+}
+function applyPreset(p){$("#aFrom").value=fmtISO(p.a[0]); $("#aTo").value=fmtISO(p.a[1]);
+  $("#bFrom").value=fmtISO(p.b[0]); $("#bTo").value=fmtISO(p.b[1]); renderCompare();}
+function buildCompare(){
+  CMP_PRESETS=computePresets();
+  const sel=$("#cmpPreset"); sel.innerHTML="";
+  CMP_PRESETS.forEach((p,i)=>{const o=document.createElement("option"); o.value=String(i); o.textContent=p.label; sel.appendChild(o);});
+  const cust=document.createElement("option"); cust.value="custom"; cust.textContent="Custom"; sel.appendChild(cust);
+  const di=Math.max(0,CMP_PRESETS.findIndex(p=>p.isDefault));
+  sel.value=String(di);
+  sel.onchange=()=>{if(sel.value!=="custom")applyPreset(CMP_PRESETS[+sel.value]);};
+  ["aFrom","aTo","bFrom","bTo"].forEach(id=>{$("#"+id).oninput=()=>{sel.value="custom"; renderCompare();};});
+  applyPreset(CMP_PRESETS[di]);
+}
+
 /* ---------- summary (optional swims.csv) ---------- */
 function applySummary(rows){
   const byKey={};
@@ -611,7 +817,7 @@ function build(){
   renderVerdict(SWIMS); renderKPIs(SWIMS);
   renderScatter(SWIMS); renderTrendBalance(SWIMS); renderTrendPace(SWIMS);
   renderEfforts(SWIMS); fillSelector(SWIMS); renderSwimDetail(SWIMS[SWIMS.length-1]);
-  renderTable(SWIMS); renderFoot(SWIMS);
+  buildCompare(); renderTable(SWIMS); renderFoot(SWIMS);
 }
 function showError(m){$("#err").textContent=m;}
 

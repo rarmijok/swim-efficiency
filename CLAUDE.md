@@ -113,15 +113,27 @@ node tests/test_parser.mjs           # extracts the parser from swim_tracker.htm
      couple of seconds with flat memory (peak RSS ~360 MB in node). Re-run any time with
      `node tools/validate_xml_parser.mjs <export.xml> <swim_laps.csv>`.
 
-2. **Save & compare exports**. Each new drop should show what changed since last time.
-   - Add a **"Save checkpoint"** button that downloads a small JSON of the per-swim aggregates
-     (date, spm, dps, pace100, swolf, key). On load, accept a checkpoint JSON → use as baseline.
-   - Show a **"since last check"** panel: count of new swims + deltas in spm/DPS/pace, and
-     highlight swims newer than the checkpoint on the scatter and in the table.
-   - **localStorage caveat**: a file:// page often has an opaque origin where `localStorage`
-     throws or doesn't persist. Treat downloaded checkpoint files as the reliable mechanism;
-     use `localStorage` only as a best-effort convenience wrapped in try/catch with graceful
-     fallback. Do **not** depend on it.
+2. **Compare two periods** — ✅ **DONE** (section 06 "Compare two periods" in the tracker).
+   The swimmer chose this over the original "since last check" checkpoint idea: instead of a
+   saved baseline, pick **two arbitrary date ranges (A and B)** and see how the stroke moved.
+   - **Presets + custom**: a preset dropdown (consecutive year pairs, last-8-weeks-vs-prior,
+     last-90-vs-prior, first-vs-second-half — built from the loaded data's date span) fills four
+     `<input type=date>` fields; editing any field switches the preset to "Custom". Default is
+     the latest year pair.
+   - **Comparison strip** (A · B · Δ) for swims, distance, SPM, DPS, pure pace, SWOLF, and —
+     when `swims.csv`/summary is present — session pace + rest%. Δ is colored by *meaning*
+     (`.up`/`.down`/`.flat`): SPM up = good, pace/SWOLF down = good, DPS/volume neutral.
+   - **Two-color scatter** reusing the hero balance geometry: period-A dots (`--pace` blue),
+     period-B dots (`--rate` amber), a median ring per period, and a **white arrow A→B** that
+     visualizes the drift. Plus a one-line plain-English verdict naming the dominant lever.
+   - All in-memory off the loaded dataset (no files/localStorage). Renders via `buildCompare()`
+     in `build()`; key fns: `computePresets`, `renderCompare`, `renderCompareScatter`.
+   - Verified on the real data: the default "2025 vs 2026" reproduces FINDINGS exactly
+     (SPM 21.1→19.6, DPS held 1.79, pure pace 2:39→2:50) with the verdict pinning the cause to
+     falling turnover.
+
+There is **no remaining planned work** — both originally-scoped features are done. Future ideas
+live in the swimmer's head; ask before inventing scope.
 
 ## Conventions & guardrails
 

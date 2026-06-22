@@ -44,6 +44,10 @@ The tracker's hero chart plots **SPM vs DPS** with a target zone and equal-pace 
 you can see at a glance whether you're getting faster by spinning your arms quicker (raising
 turnover) or gliding farther per stroke (raising efficiency).
 
+It also lets you **compare any two periods** — pick two date ranges (or a preset like "2025 vs
+2026" or "last 8 weeks vs prior 8 weeks") and see a side-by-side metric strip, a plain-English
+verdict, and a two-color scatter with an arrow showing exactly how your stroke drifted between them.
+
 > Color code (kept consistent everywhere): **amber = stroke rate**, **teal = distance/stroke**.
 
 ## Quick start
