@@ -83,6 +83,17 @@
     font-size:10px; display:block; margin-bottom:4px}
   .proj b{font-size:18px; color:var(--len)}
 
+  /* plan adherence */
+  .adherence{font-size:14px; line-height:1.5; margin:0 0 16px; padding:9px 13px;
+    background:#0c2233; border:1px solid var(--hair); border-left-width:3px; border-radius:8px}
+  .adherence.good{border-left-color:var(--good)}
+  .adherence.warn{border-left-color:var(--warn)}
+  .adherence.bad{border-left-color:var(--bad)}
+  .adherence .atag{font-family:var(--mono); font-size:10px; letter-spacing:.16em;
+    color:var(--faint); margin-right:6px}
+  .adherence b{color:var(--ink)}
+  .adherence .amut{color:var(--muted); font-size:12.5px}
+
   /* kpis */
   .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(115px,1fr)); gap:1px;
     background:var(--hair); border:1px solid var(--hair); border-radius:12px; overflow:hidden}
@@ -244,6 +255,7 @@
         <div class="vtext" id="verdict"></div>
         <div class="proj" id="proj"></div>
       </div>
+      <div class="adherence" id="adherence"></div>
       <div style="display:flex;justify-content:flex-end;margin-bottom:6px">
         <div class="toggle" id="rangeToggle">
           <button data-r="0" class="on">All</button>
@@ -694,6 +706,33 @@ function renderVerdict(swims){
     `<span style="color:var(--muted)">now ${fmtPace(pace)} · gain ${Math.round(pace-paceT)}s</span>`;
 }
 
+/* ---------- plan adherence ---------- */
+// On-plan = turnover at/above target AND stroke length held: spm >= TARGET_SPM[0] and dps >= HOLD_DPS.
+function planAdherence(swims){
+  const onPlan=s=>isFinite(s.spm)&&isFinite(s.dps)&&s.spm>=TARGET_SPM[0]&&s.dps>=HOLD_DPS;
+  const last=swims.slice(-10);
+  const hit=last.filter(onPlan).length;
+  let lastOn=null;
+  for(let i=swims.length-1;i>=0;i--){ if(onPlan(swims[i])){ lastOn=swims[i].date; break; } }
+  const failSpm=last.filter(s=>isFinite(s.spm)&&s.spm<TARGET_SPM[0]).length;
+  const failDps=last.filter(s=>isFinite(s.dps)&&s.dps<HOLD_DPS).length;
+  return {hit, n:last.length, lastOn, leverSpm: failSpm>=failDps};
+}
+function renderAdherence(swims){
+  const a=planAdherence(swims), el=$("#adherence");
+  const pct=a.n? a.hit/a.n : 0;
+  el.className="adherence "+(pct>=0.6?"good":pct>=0.3?"warn":"bad");
+  let gap;
+  if(a.n>0 && a.hit===a.n) gap="You're hitting it on every recent swim — hold this.";
+  else{
+    const lever=a.leverSpm? `turnover (need ≥ ${TARGET_SPM[0]} spm)` : `stroke length (need ≥ ${HOLD_DPS} m/stroke)`;
+    const since=a.lastOn? `last in the zone ${fmtDate(a.lastOn)}` : `no swim in the zone yet`;
+    gap=`The gap is <b>${lever}</b> — ${since}.`;
+  }
+  el.innerHTML=`<span class="atag">PLAN</span><b>${a.hit}/${a.n}</b> recent swims in the target zone `+
+    `<span class="amut">(≥ ${TARGET_SPM[0]} spm · ≥ ${HOLD_DPS} m/stroke)</span> — ${gap}`;
+}
+
 function renderEfforts(swims){
   const dists=[100,200,400]; let html="";
   const got={};
@@ -724,10 +763,13 @@ function renderTable(swims){
 }
 
 function renderFoot(swims){
+  const pools=[...new Set(swims.map(s=>Math.round(s.pool*10)/10).filter(isFinite))].sort((a,b)=>a-b);
+  const poolTxt = pools.length? `${pools.join(" / ")} m pool${pools.length>1?"s":""}` : "";
   $("#foot").innerHTML=
-    `${swims.length} swims · ${fmtDate(swims[0].date)} → ${fmtDate(swims[swims.length-1].date)}<br>`+
+    `${swims.length} swims · ${fmtDate(swims[0].date)} → ${fmtDate(swims[swims.length-1].date)}`+
+    (poolTxt?` · ${poolTxt}`:"")+`<br>`+
     `Speed = (strokes/min ÷ 60) × distance/stroke. Targets — rate ${TARGET_SPM[0]}–${TARGET_SPM[1]} spm, `+
-    `length ≥ ${HOLD_DPS} m/stroke — come from your own best stretch.<br>`+
+    `length ≥ ${HOLD_DPS} m/stroke — come from your own best stretch. Yard pools are converted to metres.<br>`+
     `Reads files locally; nothing leaves this device.`;
 }
 
@@ -1020,7 +1062,7 @@ function build(){
   if(SWIMS.length<2){showError("Need at least two swims with lap data to chart trends."); return;}
   $("#empty").style.display="none"; $("#app").style.display="block";
   $("#ovToggle").onclick=e=>{const b=e.target.closest("button"); if(b)applyOverviewMode(b.dataset.m);};
-  renderVerdict(SWIMS);
+  renderVerdict(SWIMS); renderAdherence(SWIMS);
   applyOverviewMode(OVERVIEW_MODE);  // renders the Overview charts AND the KPIs for the selected window
   renderScatter(SWIMS); renderTrendBalance(SWIMS); renderTrendPace(SWIMS);
   if(HASHR){$("#hrCard").style.display=""; renderEconomy(SWIMS);} else $("#hrCard").style.display="none";
@@ -1120,8 +1162,8 @@ function makeHealthParser() {
             }
           }
           let lapLen = null;
-          const lm = block.match(/LapLength"\s+value="([\d.]+)/);
-          if (lm) lapLen = +lm[1];
+          const lm = block.match(/LapLength"\s+value="([\d.]+)\s*([a-zA-Z]*)"/);
+          if (lm) { lapLen = +lm[1]; if (/^(yd|yard|yards)$/i.test(lm[2])) lapLen *= 0.9144; } // yards -> metres
           // Heart rate over the workout, from the HeartRate WorkoutStatistics child.
           let avgHr = null, maxHr = null;
           const hrm = block.match(/<WorkoutStatistics\b[^>]*type="HKQuantityTypeIdentifierHeartRate"[^>]*\/?>/);

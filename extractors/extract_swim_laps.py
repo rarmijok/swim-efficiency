@@ -69,9 +69,12 @@ def main():
                             pass
                 for md in elem.findall("MetadataEntry"):
                     if "LapLength" in md.get("key", ""):
-                        m = re.search(r"[\d.]+", md.get("value", ""))
+                        m = re.search(r"([\d.]+)\s*([a-zA-Z]*)", md.get("value", ""))
                         if m:
-                            w["lap_len"] = float(m.group())
+                            ll = float(m.group(1))
+                            if m.group(2).lower() in ("yd", "yard", "yards"):
+                                ll *= 0.9144  # yards -> metres, so all metrics stay in metres
+                            w["lap_len"] = ll
                 workouts.append(w)
             elem.clear()
             root.clear()

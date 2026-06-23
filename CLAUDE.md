@@ -50,7 +50,10 @@ load the whole file into memory.
   in-browser parser puts the same on its summary rows, so HR flows through the existing summary merge.
 - **Associating strokes to a swim**: a stroke record belongs to a workout if its start is
   within `[workout.start, workout.end)`. Open-water swims have no stroke records (skip them).
-- **Pool length** = lap-length metadata if present, else `total_distance / num_lengths`.
+- **Pool length** = lap-length metadata if present, else `total_distance / num_lengths`. The
+  `HKMetadataKeyLapLength` value carries a unit (`"25 m"`, `"25 yd"`); **yards are converted to
+  metres** (×0.9144) in both the Python extractor and the in-browser parser, so every metric stays
+  metric. `pool_length_m` is therefore always metres. The footer surfaces the pool length(s).
 - **Dates** look like `2024-11-07 07:55:36 -0400` (note the timezone offset).
 - **`workout_start` key**: the first 16 chars of the start date, `YYYY-MM-DD HH:MM`, kept in
   the **original offset (not converted to another timezone)**. The CSV path and the XML path

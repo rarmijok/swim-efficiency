@@ -146,5 +146,33 @@ try {
   console.log("    " + (e.message || e));
 }
 
+// ---- units: a yard pool length must convert to metres, identically in both paths ----
+console.log("\nUnit handling (yard pool):");
+try {
+  const yxml = [
+    '<?xml version="1.0"?>', '<HealthData>',
+    ' <Record type="HKQuantityTypeIdentifierSwimmingStrokeCount" startDate="2025-01-01 08:00:00 -0400" endDate="2025-01-01 08:00:20 -0400" value="18"><MetadataEntry key="HKSwimmingStrokeStyle" value="2"/></Record>',
+    ' <Record type="HKQuantityTypeIdentifierSwimmingStrokeCount" startDate="2025-01-01 08:00:22 -0400" endDate="2025-01-01 08:00:42 -0400" value="18"><MetadataEntry key="HKSwimmingStrokeStyle" value="2"/></Record>',
+    ' <Workout workoutActivityType="HKWorkoutActivityTypeSwimming" duration="1.0" durationUnit="min" startDate="2025-01-01 08:00:00 -0400" endDate="2025-01-01 08:01:00 -0400"><MetadataEntry key="HKMetadataKeyLapLength" value="25 yd"/></Workout>',
+    '</HealthData>', ''].join("\n");
+  const expectM = 25 * 0.9144;
+  const p = makeHealthParser(); p.feed(yxml);
+  const r = p.finish();
+  const jsPool = +buildLapRows(r.strokes, r.workouts).lapRows[0].pool_length_m;
+  check(`JS converts 25 yd -> ${expectM.toFixed(2)} m`, Math.abs(jsPool - expectM) < 0.01);
+
+  const tmpXml = join(tmpdir(), `yardtest_${process.pid}.xml`);
+  const tmpCsv = join(tmpdir(), `yardtest_${process.pid}.csv`);
+  writeFileSync(tmpXml, yxml);
+  execFileSync("python3", [join(__dirname, "..", "extractors", "extract_swim_laps.py"), tmpXml, tmpCsv], { stdio: "pipe" });
+  const yl = readFileSync(tmpCsv, "utf8").replace(/\r/g, "").split("\n").filter(l => l.trim());
+  const yh = yl[0].split(","), yr = yl[1].split(",");
+  const pyPool = +yr[yh.indexOf("pool_length_m")];
+  check(`Python matches JS pool (${jsPool.toFixed(2)} m)`, Math.abs(pyPool - jsPool) < 0.01);
+} catch (e) {
+  check("yard-pool test ran", false);
+  console.log("    " + (e.message || e));
+}
+
 console.log(failures ? `\n${failures} FAILED` : "\nAll checks passed.");
 process.exit(failures ? 1 : 0);
