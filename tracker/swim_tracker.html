@@ -84,14 +84,14 @@
   .proj b{font-size:18px; color:var(--len)}
 
   /* kpis */
-  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); gap:1px;
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(115px,1fr)); gap:1px;
     background:var(--hair); border:1px solid var(--hair); border-radius:12px; overflow:hidden}
-  .kpi{background:linear-gradient(180deg,#112940,#0e2233); padding:15px 16px}
-  .kpi .l{font-family:var(--mono); font-size:10px; letter-spacing:.14em;
+  .kpi{background:linear-gradient(180deg,#112940,#0e2233); padding:9px 12px}
+  .kpi .l{font-family:var(--mono); font-size:9px; letter-spacing:.1em;
     text-transform:uppercase; color:var(--faint)}
   .kpi .v{font-family:var(--mono); font-variant-numeric:tabular-nums;
-    font-size:25px; letter-spacing:-.02em; margin-top:4px}
-  .kpi .d{font-family:var(--mono); font-size:11px; margin-top:2px}
+    font-size:18px; letter-spacing:-.02em; margin-top:2px}
+  .kpi .d{font-family:var(--mono); font-size:9.5px; margin-top:1px}
   .up{color:var(--good)} .down{color:var(--bad)} .flat{color:var(--muted)}
 
   /* charts */
@@ -231,6 +231,7 @@
 
     <!-- KPIs -->
     <section>
+      <p class="sub" id="kpiCap" style="margin:0 0 10px"></p>
       <div class="kpis" id="kpis"></div>
     </section>
 
@@ -625,12 +626,16 @@ function kpiWindows(mode){
           label:"vs prior 30 d", span:"last 30 days"};
 }
 function renderKPIs(mode){
+  const isM=(mode||OVERVIEW_MODE)==="months";
   const w=kpiWindows(mode||OVERVIEW_MODE);
+  $("#kpiCap").textContent = isM
+    ? "Last 12 months · median per swim, Δ vs the previous 12 months"
+    : "Last 30 days · median per swim, Δ vs the previous 30 days";
   const pick=(a,b)=>SWIMS.filter(z=>z.date>=a&&z.date<b);
   const cur=pick(w.cur[0],w.cur[1]), prv=pick(w.prv[0],w.prv[1]);
   const m=(arr,f)=>med(arr.map(z=>z[f]));
   const cards=[
-    {l:"pure pace /100m",f:"pace100",fmt:fmtPace,better:"down"},
+    {l:"pace /100m",f:"pace100",fmt:fmtPace,better:"down"},
     {l:"strokes / min",f:"spm",fmt:v=>v.toFixed(1),better:"up"},
     {l:"dist / stroke",f:"dps",fmt:v=>v.toFixed(2)+"m",better:"up"},
     {l:"SWOLF",f:"swolf",fmt:v=>v.toFixed(0),better:"down"},
@@ -648,18 +653,18 @@ function renderKPIs(mode){
       const dv=(c.f==="pace100")?(sg+Math.round(diff)+"s"):
                (c.f==="avgHr"||c.f==="beats100")?(sg+Math.round(diff)):
                (sg+diff.toFixed(c.f==="dps"?2:1));
-      d=dv+" "+w.label;}
+      d=dv;}
     html+=`<div class="kpi"><div class="l">${c.l}</div>
       <div class="v">${isFinite(val)?c.fmt(val):"–"}</div>
       <div class="d ${cls}">${d}</div></div>`;});
   // volume + optional rest — also scoped to the selected window
   const km=(cur.reduce((a,z)=>a+z.dist,0)/1000).toFixed(0);
   html+=`<div class="kpi"><div class="l">swims · volume</div>
-    <div class="v">${cur.length}</div><div class="d flat">${km} km · ${w.span}</div></div>`;
+    <div class="v">${cur.length}</div><div class="d flat">${km} km</div></div>`;
   if(SUMMARY){const rr=med(cur.map(z=>z.restFrac).filter(isFinite))*100;
     html+=`<div class="kpi"><div class="l">rest / session</div>
       <div class="v">${isFinite(rr)?rr.toFixed(0)+"%":"–"}</div>
-      <div class="d flat">${w.span} median</div></div>`;}
+      <div class="d flat">median</div></div>`;}
   $("#kpis").innerHTML=html;
 }
 
