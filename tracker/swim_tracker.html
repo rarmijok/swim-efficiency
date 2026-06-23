@@ -256,14 +256,6 @@
         <div class="proj" id="proj"></div>
       </div>
       <div class="adherence" id="adherence"></div>
-      <div style="display:flex;justify-content:flex-end;margin-bottom:6px">
-        <div class="toggle" id="rangeToggle">
-          <button data-r="0" class="on">All</button>
-          <button data-r="365">12 mo</button>
-          <button data-r="180">6 mo</button>
-          <button data-r="90">3 mo</button>
-        </div>
-      </div>
       <div id="scatter"></div>
       <div class="legend">
         <span><i style="background:#f4a259"></i>≤1 mo</span>
@@ -1046,17 +1038,6 @@ function fillSelector(swims){
   sel.onchange=()=>{const z=swims.find(x=>x.key===sel.value); if(z)renderSwimDetail(z);};
 }
 
-/* ---------- range toggle ---------- */
-function setupRange(){
-  $("#rangeToggle").addEventListener("click",e=>{
-    const b=e.target.closest("button"); if(!b)return;
-    [...e.currentTarget.children].forEach(c=>c.classList.toggle("on",c===b));
-    const days=+b.dataset.r; let view=SWIMS;
-    if(days>0){const cut=Date.now()-days*864e5; view=SWIMS.filter(z=>z.date.getTime()>=cut);}
-    if(view.length>=2){renderScatter(view); renderTrendBalance(view); renderTrendPace(view);}
-  });
-}
-
 /* ---------- boot ---------- */
 function build(){
   if(SWIMS.length<2){showError("Need at least two swims with lap data to chart trends."); return;}
@@ -1319,7 +1300,6 @@ function finish(lapRows,sumRows){
   SUMMARY=null; HASHR=false;          // reset so a re-drop doesn't keep stale summary/HR flags
   SWIMS=aggregate(lapRows);
   if(sumRows)applySummary(sumRows);
-  setupRange();
   build();
 }
 
