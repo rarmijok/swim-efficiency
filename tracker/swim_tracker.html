@@ -609,8 +609,25 @@ function renderSwimDetail(swim){
   el("text",{x:(P.l+W-P.r)/2,y:H-8,fill:"#5c768c","font-size":10,"text-anchor":"middle","font-family":"var(--mono)"},s).textContent="length number";
 }
 
-function renderKPIs(swims){
-  const recent=swims.slice(-10), prev=swims.slice(-20,-10);
+// KPI window follows the Overview toggle: last 30 days (vs prior 30) or last 12 months
+// (vs prior 12), so the scoreboard and the overview charts cover the same period.
+function kpiWindows(mode){
+  const now=new Date();
+  if(mode==="months"){
+    const base=new Date(now.getFullYear(),now.getMonth(),1);
+    return {cur:[new Date(base.getFullYear(),base.getMonth()-11,1), now],
+            prv:[new Date(base.getFullYear(),base.getMonth()-23,1), new Date(base.getFullYear(),base.getMonth()-11,1)],
+            label:"vs prior yr", span:"last 12 mo"};
+  }
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  return {cur:[new Date(today.getTime()-29*864e5), now],
+          prv:[new Date(today.getTime()-59*864e5), new Date(today.getTime()-29*864e5)],
+          label:"vs prior 30 d", span:"last 30 days"};
+}
+function renderKPIs(mode){
+  const w=kpiWindows(mode||OVERVIEW_MODE);
+  const pick=(a,b)=>SWIMS.filter(z=>z.date>=a&&z.date<b);
+  const cur=pick(w.cur[0],w.cur[1]), prv=pick(w.prv[0],w.prv[1]);
   const m=(arr,f)=>med(arr.map(z=>z[f]));
   const cards=[
     {l:"pure pace /100m",f:"pace100",fmt:fmtPace,better:"down"},
@@ -622,27 +639,27 @@ function renderKPIs(swims){
     {l:"avg HR",f:"avgHr",fmt:v=>Math.round(v)+" bpm",better:null},
     {l:"beats / 100m",f:"beats100",fmt:v=>Math.round(v),better:"down"});
   let html="";
-  cards.forEach(c=>{const now=m(recent,c.f),was=m(prev,c.f);
+  cards.forEach(c=>{const val=m(cur,c.f),was=m(prv,c.f);
     let d="",cls="flat";
-    if(isFinite(was)&&isFinite(now)){const diff=now-was;
+    if(isFinite(was)&&isFinite(val)){const diff=val-was;
       const improve=c.better===null?null:((c.better==="down")?diff<0:diff>0);
       cls=Math.abs(diff)<1e-6?"flat":(improve===null?"flat":(improve?"up":"down"));
       const sg=diff>0?"+":"";
       const dv=(c.f==="pace100")?(sg+Math.round(diff)+"s"):
                (c.f==="avgHr"||c.f==="beats100")?(sg+Math.round(diff)):
                (sg+diff.toFixed(c.f==="dps"?2:1));
-      d=dv+" vs prior 10";}
+      d=dv+" "+w.label;}
     html+=`<div class="kpi"><div class="l">${c.l}</div>
-      <div class="v">${isFinite(now)?c.fmt(now):"–"}</div>
+      <div class="v">${isFinite(val)?c.fmt(val):"–"}</div>
       <div class="d ${cls}">${d}</div></div>`;});
-  // volume + optional rest
-  const km=(swims.reduce((a,z)=>a+z.dist,0)/1000).toFixed(0);
+  // volume + optional rest — also scoped to the selected window
+  const km=(cur.reduce((a,z)=>a+z.dist,0)/1000).toFixed(0);
   html+=`<div class="kpi"><div class="l">swims · volume</div>
-    <div class="v">${swims.length}</div><div class="d flat">${km} km total</div></div>`;
-  if(SUMMARY){const rr=med(swims.slice(-10).map(z=>z.restFrac).filter(isFinite))*100;
+    <div class="v">${cur.length}</div><div class="d flat">${km} km · ${w.span}</div></div>`;
+  if(SUMMARY){const rr=med(cur.map(z=>z.restFrac).filter(isFinite))*100;
     html+=`<div class="kpi"><div class="l">rest / session</div>
       <div class="v">${isFinite(rr)?rr.toFixed(0)+"%":"–"}</div>
-      <div class="d flat">recent median</div></div>`;}
+      <div class="d flat">${w.span} median</div></div>`;}
   $("#kpis").innerHTML=html;
 }
 
@@ -796,6 +813,7 @@ function applyOverviewMode(mode){
   $("#ovUnitDist").textContent = mode==="months"?"m/mo":"m/day";
   $("#ovUnitTime").textContent = mode==="months"?"min/mo":"min/day";
   renderOverview(mode);
+  renderKPIs(mode);
 }
 
 /* ---------- compare two periods ---------- */
@@ -997,8 +1015,8 @@ function build(){
   if(SWIMS.length<2){showError("Need at least two swims with lap data to chart trends."); return;}
   $("#empty").style.display="none"; $("#app").style.display="block";
   $("#ovToggle").onclick=e=>{const b=e.target.closest("button"); if(b)applyOverviewMode(b.dataset.m);};
-  applyOverviewMode(OVERVIEW_MODE);
-  renderVerdict(SWIMS); renderKPIs(SWIMS);
+  renderVerdict(SWIMS);
+  applyOverviewMode(OVERVIEW_MODE);  // renders the Overview charts AND the KPIs for the selected window
   renderScatter(SWIMS); renderTrendBalance(SWIMS); renderTrendPace(SWIMS);
   if(HASHR){$("#hrCard").style.display=""; renderEconomy(SWIMS);} else $("#hrCard").style.display="none";
   renderEfforts(SWIMS); fillSelector(SWIMS); renderSwimDetail(SWIMS[SWIMS.length-1]);
