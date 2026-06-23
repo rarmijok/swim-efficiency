@@ -21,6 +21,8 @@ Usage:
 """
 import csv
 import re
+import bisect
+import calendar
 import argparse
 import statistics as st
 import xml.etree.ElementTree as ET
@@ -28,6 +30,7 @@ from datetime import datetime
 
 STROKE = "HKQuantityTypeIdentifierSwimmingStrokeCount"
 SWIM = "HKWorkoutActivityTypeSwimming"
+HEART = "HKQuantityTypeIdentifierHeartRate"   # exact; not HeartRateVariability…
 STYLE_MAP = {"0": "unknown", "1": "mixed", "2": "freestyle",
              "3": "backstroke", "4": "breaststroke", "5": "butterfly"}
 
@@ -35,6 +38,18 @@ STYLE_MAP = {"0": "unknown", "1": "mixed", "2": "freestyle",
 def pdate(s):
     # e.g. "2024-11-07 07:55:36 -0400"
     return datetime.strptime(s, "%Y-%m-%d %H:%M:%S %z")
+
+
+def fast_epoch(s):
+    # "2024-11-07 07:55:36 -0400" -> UTC epoch seconds. Hand-parsed (no strptime) because
+    # pass 2 calls this on every heart-rate sample, of which there can be millions.
+    try:
+        y, mo, d = int(s[0:4]), int(s[5:7]), int(s[8:10])
+        h, mi, se = int(s[11:13]), int(s[14:16]), int(s[17:19])
+        off = (int(s[21:23]) * 3600 + int(s[23:25]) * 60) * (1 if s[20] == "+" else -1)
+        return calendar.timegm((y, mo, d, h, mi, se, 0, 0, 0)) - off
+    except (ValueError, IndexError):
+        return None
 
 
 def main():
@@ -99,6 +114,7 @@ def main():
     strokes.sort(key=lambda r: r["s"])
 
     rows = []
+    windows = []   # (start_epoch, end_epoch, row) per length, for the heart-rate pass
     for w in workouts:
         laps = [r for r in strokes if w["s"] <= r["s"] < w["e"]]
         if not laps:
@@ -115,7 +131,7 @@ def main():
             sn = r["value"]
             dps = (pool / sn) if (pool and sn) else None
             swolf = (secs + sn) if sn else None
-            rows.append({
+            row = {
                 "workout_start": w["s"].strftime("%Y-%m-%d %H:%M"),
                 "lap_index": i,
                 "lap_count": n,
@@ -125,10 +141,47 @@ def main():
                 "dist_per_stroke_m": round(dps, 3) if dps else "",
                 "swolf": round(swolf, 1) if swolf else "",
                 "stroke_style": r["style"] or "",
-            })
+                "hr": "",
+            }
+            rows.append(row)
+            windows.append((r["s"].timestamp(), r["e"].timestamp(), row))
+
+    # Second pass: average per-sample heart rate into each length's time window. The window
+    # set isn't known until all workouts are read, so HR needs its own streaming pass.
+    if windows:
+        swim_days = {r["workout_start"][:10] for r in rows}
+        windows.sort(key=lambda x: x[0])
+        starts = [x[0] for x in windows]
+        gmin, gmax = windows[0][0], max(x[1] for x in windows)
+        hr_sum = [0.0] * len(windows)
+        hr_cnt = [0] * len(windows)
+        ctx = ET.iterparse(args.xml_path, events=("start", "end"))
+        _, root2 = next(ctx)
+        for event, elem in ctx:
+            if event != "end":
+                continue
+            if elem.tag == "Record" and elem.get("type") == HEART:
+                sd = elem.get("startDate", "")
+                if sd[:10] in swim_days:          # cheap reject of the all-day HR firehose
+                    t = fast_epoch(sd)
+                    if t is not None and gmin <= t < gmax:
+                        try:
+                            v = float(elem.get("value"))
+                        except (TypeError, ValueError):
+                            v = None
+                        if v is not None:
+                            idx = bisect.bisect_right(starts, t) - 1
+                            if idx >= 0 and t < windows[idx][1]:
+                                hr_sum[idx] += v
+                                hr_cnt[idx] += 1
+            elem.clear()
+            root2.clear()
+        for i, x in enumerate(windows):
+            if hr_cnt[i] > 0:
+                x[2]["hr"] = int(round(hr_sum[i] / hr_cnt[i]))
 
     cols = ["workout_start", "lap_index", "lap_count", "pool_length_m", "seconds",
-            "strokes", "dist_per_stroke_m", "swolf", "stroke_style"]
+            "strokes", "dist_per_stroke_m", "swolf", "stroke_style", "hr"]
     with open(args.out_csv, "w", newline="") as f:
         wtr = csv.DictWriter(f, fieldnames=cols)
         wtr.writeheader()

@@ -68,14 +68,15 @@ def make_swims():
         dist_mode = ["stat_type_first", "stat_sum_first", "total_attr"][k % 3]
         laps = []
         clock = day
-        for _ in range(n):
+        for idx in range(n):
             spm = max(14.0, base_spm + rng.uniform(-1.2, 1.2))
             dps = max(1.2, base_dps + rng.uniform(-0.08, 0.08))
             strokes = max(8, round(POOL / dps))
             secs = round(strokes / (spm / 60.0), 1)
             st_ = clock
             en_ = clock + dt.timedelta(seconds=secs)
-            laps.append((st_, en_, strokes))
+            hr_len = int(round(110 + idx * 0.4))   # drifts up across the swim (cardiac drift)
+            laps.append((st_, en_, strokes, hr_len))
             clock = en_ + dt.timedelta(seconds=rng.uniform(0.5, 3.0))
         dur_min = (clock - day).total_seconds() / 60.0
         hr = round(118.0 - k * 0.3 + rng.uniform(-4, 4), 1)   # gently drifting avg HR
@@ -108,6 +109,13 @@ def hr_self_closing(t):
     return (f' <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" '
             f'sourceVersion="10.4" device="{DEVICE}" unit="count/min" '
             f'startDate="{fmt(t)}" endDate="{fmt(t)}" value="{rng.randint(80, 160)}"/>')
+
+
+def hr_sample(t, val):
+    # a single heart-rate sample (self-closing) at a known time and value — used to place
+    # one sample inside each length so per-length HR is deterministic.
+    return (f' <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" '
+            f'unit="count/min" startDate="{fmt(t)}" endDate="{fmt(t)}" value="{val}"/>')
 
 
 def hrv_paired(t):
@@ -173,15 +181,16 @@ def write_xml(swims):
         f' </Workout>')
 
     for sw in swims:
-        # heart-rate noise (self-closing — the bulk of a real export)
-        for _ in range(rng.randint(2, 5)):
-            hr = sw["start"] + dt.timedelta(seconds=rng.randint(1, 30))
-            out.append(hr_self_closing(hr))
-        # one HRV record (paired, nested) as additional noise
-        out.append(hrv_paired(sw["start"] + dt.timedelta(seconds=1)))
+        # HR noise BEFORE the swim + an HRV record — must be rejected by the window match
+        # / skipped by the per-length HR pass (they fall outside every length window).
+        out.append(hr_self_closing(sw["start"] - dt.timedelta(minutes=5)))
+        out.append(hr_self_closing(sw["start"] - dt.timedelta(minutes=3)))
+        out.append(hrv_paired(sw["start"] - dt.timedelta(minutes=4)))
 
-        for (st_, en_, strokes) in sw["laps"]:
+        # one stroke record per length + one HR sample at the length's midpoint (drives per-length HR)
+        for (st_, en_, strokes, hr_len) in sw["laps"]:
             out.append(stroke_record(st_, en_, strokes, sw["style_code"]))
+            out.append(hr_sample(st_ + (en_ - st_) / 2, hr_len))
 
         total_attr = (f' totalDistance="{sw["dist"]:g}" totalDistanceUnit="m"'
                       if sw["dist_mode"] == "total_attr" else "")
@@ -214,14 +223,14 @@ def write_xml(swims):
 
 def write_csv_and_expected(swims):
     cols = ["workout_start", "lap_index", "lap_count", "pool_length_m", "seconds",
-            "strokes", "dist_per_stroke_m", "swolf", "stroke_style"]
+            "strokes", "dist_per_stroke_m", "swolf", "stroke_style", "hr"]
     rows = []
     spm_all, dps_all = [], []
     for sw in swims:
         key = sw["start"].strftime("%Y-%m-%d %H:%M")
         n = len(sw["laps"])
         style = STYLE_NAME[sw["style_code"]]
-        for i, (st_, en_, strokes) in enumerate(sw["laps"], 1):
+        for i, (st_, en_, strokes, hr_len) in enumerate(sw["laps"], 1):
             secs = round((en_ - st_).total_seconds(), 1)
             dps = round(POOL / strokes, 3)
             spm = strokes / (secs / 60.0)
@@ -229,7 +238,7 @@ def write_csv_and_expected(swims):
             rows.append({"workout_start": key, "lap_index": i, "lap_count": n,
                          "pool_length_m": POOL, "seconds": secs, "strokes": strokes,
                          "dist_per_stroke_m": dps, "swolf": round(secs + strokes, 1),
-                         "stroke_style": style})
+                         "stroke_style": style, "hr": hr_len})
     with open(os.path.join(TESTS, "sample_swim_laps.csv"), "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=cols); w.writeheader(); w.writerows(rows)
     expected = {"n_swims": len(swims), "n_lengths": len(rows),

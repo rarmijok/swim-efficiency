@@ -29,12 +29,12 @@ function loadParserFromTracker() {
   const html = readFileSync(join(__dirname, "..", "tracker", "swim_tracker.html"), "utf8");
   const m = html.match(/BEGIN health-xml-parser[\s\S]*?\*\/\n([\s\S]*?)\/\* =+ END health-xml-parser/);
   if (!m) throw new Error("could not find the health-xml-parser block in swim_tracker.html");
-  const src = m[1] + "\nmodule.exports={makeHealthParser,buildLapRows,parseAppleDate};\n";
+  const src = m[1] + "\nmodule.exports={makeHealthParser,buildLapRows,makeHRScanner,parseAppleDate};\n";
   const tmp = join(tmpdir(), `health_parser_${process.pid}.cjs`);
   writeFileSync(tmp, src);
   return require(tmp);
 }
-const { makeHealthParser, buildLapRows } = loadParserFromTracker();
+const { makeHealthParser, buildLapRows, makeHRScanner } = loadParserFromTracker();
 
 const xmlPath = join(__dirname, "sample_export.xml");
 const xml = readFileSync(xmlPath, "utf8");
@@ -48,10 +48,16 @@ function median(a) {
 }
 
 function run(chunkSize) {
+  // Pass 1: workouts + strokes -> lap rows + per-length windows.
   const p = makeHealthParser();
   for (let i = 0; i < xml.length; i += chunkSize) p.feed(xml.slice(i, i + chunkSize));
   const { strokes, workouts } = p.finish();
-  return buildLapRows(strokes, workouts);
+  const res = buildLapRows(strokes, workouts);
+  // Pass 2: per-length heart rate (same chunking, so chunk-boundary handling is exercised).
+  const hr = makeHRScanner(res.windows);
+  for (let i = 0; i < xml.length; i += chunkSize) hr.feed(xml.slice(i, i + chunkSize));
+  hr.finish();
+  return res;
 }
 
 let failures = 0;
@@ -80,6 +86,15 @@ check(`every lap swim has a summary row`, lapKeys.every(k => sumKeys.has(k)));
 // swim has none. The parser must read average HR off the workout (order-independent).
 const hrRows = big.summaryRows.filter(r => isFinite(+r.avgHeartRate) && +r.avgHeartRate > 0);
 check(`heart rate parsed for all ${expected.n_swims} pool swims`, hrRows.length === expected.n_swims);
+// Per-length HR (pass 2): every length got a sample, and HR drifts up within a swim
+// (the synthetic data places a rising sample at each length midpoint; out-of-window noise
+// before each swim must NOT be counted).
+const withLenHr = big.lapRows.filter(r => isFinite(+r.hr) && +r.hr > 0).length;
+check(`per-length HR on all ${expected.n_lengths} lengths`, withLenHr === expected.n_lengths);
+const firstSwimKey = big.lapRows[0].workout_start;
+const firstSwim = big.lapRows.filter(r => r.workout_start === firstSwimKey);
+check(`per-length HR drifts up within a swim`,
+      +firstSwim[firstSwim.length - 1].hr > +firstSwim[0].hr);
 
 // chunk-boundary robustness: tiny chunks must give identical output
 const tiny = run(7);
@@ -116,7 +131,7 @@ try {
   // tracker's display precision and doesn't move any median. The invariant that
   // matters: the workout_start KEY is identical and every metric agrees to rounding.
   const EXACT = new Set(["workout_start", "stroke_style", "lap_index", "lap_count", "strokes"]);
-  const TOL = { pool_length_m: 0.011, seconds: 0.11, dist_per_stroke_m: 0.0011, swolf: 0.11 };
+  const TOL = { pool_length_m: 0.011, seconds: 0.11, dist_per_stroke_m: 0.0011, swolf: 0.11, hr: 1.0 };
   const show = r => head.map(h => `${h}=${r[h] ?? ""}`).join("|");
   function rowsEqual(py, js) {
     for (const h of head) {

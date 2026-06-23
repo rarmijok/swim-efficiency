@@ -44,10 +44,14 @@ load the whole file into memory.
   Pool length may appear as `<MetadataEntry key="HKMetadataKeyLapLength" value="25 m"/>`.
 - **Per-workout heart rate** is a child `<WorkoutStatistics type="HKQuantityTypeIdentifierHeartRate"
   average="113.6" minimum="62" maximum="136" unit="count/min"/>` — read avg/min/max off that
-  attribute (exact type match, so HRV doesn't sneak in). This is the cheap HR source: **no need to
-  scan the millions of per-sample `<Record type="…HeartRate"/>` rows**, which the parser still skips.
+  attribute (exact type match, so HRV doesn't sneak in). This is the cheap per-swim HR source.
   `extract_workouts.py` writes `avgHeartRate`/`minHeartRate`/`maxHeartRate` into `swims.csv`; the
   in-browser parser puts the same on its summary rows, so HR flows through the existing summary merge.
+- **Per-length heart rate** comes from the **per-sample** `<Record type="HKQuantityTypeIdentifierHeartRate"
+  startDate="…" value="N"/>` rows (the millions that pass 1 skips). The `hr` column on `swim_laps.csv`
+  is the average of the samples whose `startDate` lands in a length's `[stroke.start, stroke.end)`
+  window — computed in a **second streaming pass** since the windows aren't known until all workouts
+  are read. Match the type **exactly** (`"…HeartRate"`) so HeartRateVariability… doesn't get counted.
 - **Associating strokes to a swim**: a stroke record belongs to a workout if its start is
   within `[workout.start, workout.end)`. Open-water swims have no stroke records (skip them).
 - **Pool length** = lap-length metadata if present, else `total_distance / num_lengths`. The
@@ -120,9 +124,10 @@ node tests/test_parser.mjs           # extracts the parser from swim_tracker.htm
    extracts that exact block and asserts it reproduces `extract_swim_laps.py` row-for-row on
    a quirky synthetic export, across every chunk-boundary.
    - **Validated against the real export** (809 MB, HealthKit Export Version 14): the XML path
-     reproduces `data/swim_laps.csv` exactly — **8640 lengths across 227 swims, every row matching**
-     (keys exact, metrics within rounding) and identical per-year SPM/DPS medians. Streamed in a
-     couple of seconds with flat memory (peak RSS ~360 MB in node). Re-run any time with
+     reproduces `data/swim_laps.csv` exactly — **8680 lengths across 228 swims, every row matching**
+     (keys exact, metrics within rounding, incl. per-length `hr`) and identical per-year SPM/DPS
+     medians. Two streaming passes (workouts/strokes, then per-length HR) in ~2 s with flat memory
+     (peak RSS ~480 MB in node). Re-run any time with
      `node tools/validate_xml_parser.mjs <export.xml> <swim_laps.csv>`.
 
 2. **Compare two periods** — ✅ **DONE** (section 06 "Compare two periods" in the tracker).
@@ -151,8 +156,15 @@ node tests/test_parser.mjs           # extracts the parser from swim_tracker.htm
    cardiac cost, lower=better). `extract_workouts.py` writes the HR columns so the CSV path has
    parity with the XML path. Verified on real data: avg HR ~flat 2025→2026 (112→111) while
    beats/100m **rose 298→316** — i.e. the slowdown is paid effort, not reduced effort.
-   - **Possible extension** (not built): per-length HR for within-swim cardiac drift in "Inside one
-     swim" — would require matching per-sample HR records to length windows (a second streaming pass).
+   - **Per-length HR / within-swim cardiac drift** — ✅ **DONE**. A `hr` column on each length
+     (avg of the per-sample `<Record type="…HeartRate"/>` records whose timestamp falls in that
+     length's window). It needs a **second streaming pass** (the length windows aren't known until
+     all workouts are read): the in-browser `parseHealthExport` runs pass 1 (workouts+strokes →
+     `buildLapRows` + per-length `windows`) then pass 2 (`makeHRScanner` averages HR into the
+     windows, flat memory); `extract_swim_laps.py` mirrors this with a second `iterparse` (fast
+     hand-parsed dates + a swim-day prefix filter so it skips the all-day HR firehose; ~16 s on the
+     809 MB export). "Inside one swim" overlays the HR line (red, right axis). Verified: JS == Python
+     per-length HR row-for-row on synthetic + the real export (8680 lengths / 228 swims).
 
 Beyond that there is **no remaining planned work**. Future ideas live in the swimmer's head; ask
 before inventing scope.

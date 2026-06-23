@@ -340,13 +340,15 @@
     <!-- SWIM DETAIL -->
     <section class="card">
       <div class="sechead"><span class="n">07</span><h3>Inside one swim</h3></div>
-      <p class="sub">Length-by-length. Use this to check a tempo set: did your rate rise without your length collapsing?</p>
+      <p class="sub">Length-by-length — pace, stroke rate, and heart rate (when the export has it).
+        Watch for <b style="color:var(--hr)">cardiac drift</b>: HR creeping up across the swim tells you
+        a slowdown was fatigue; a falling rate or length with flat HR means the stroke broke down.</p>
       <div style="margin-bottom:12px"><select id="swimSel"></select></div>
       <div id="swimDetail"></div>
       <div class="legend">
         <span><i style="background:var(--pace)"></i>pace / length</span>
         <span><i style="background:var(--rate)"></i>strokes / min</span>
-        <span><i style="background:var(--len)"></i>distance / stroke</span>
+        <span><i style="background:var(--hr)"></i>heart rate</span>
       </div>
     </section>
 
@@ -407,7 +409,8 @@ function aggregate(rows){
       spm:med(spmArr), dps:med(dpsArr), swolf:med(swolfArr), secLen:med(secArr),
       pace100: dist>0? totalSec/dist*100 : NaN,
       totalSec,
-      laps:laps.map((r,i)=>({i:i+1, sec:+r.seconds, spm:spmArr[i], dps:dpsArr[i], swolf:+r.swolf, strokes:+r.strokes})),
+      laps:laps.map((r,i)=>({i:i+1, sec:+r.seconds, spm:spmArr[i], dps:dpsArr[i], swolf:+r.swolf, strokes:+r.strokes,
+        hr:(r.hr!=null&&r.hr!==""&&isFinite(+r.hr))?+r.hr:NaN})),
     });
   }
   swims.sort((a,b)=>a.date-b.date);
@@ -602,12 +605,23 @@ function renderSwimDetail(swim){
   // spm line
   let ds="";laps.forEach(l=>{if(!isFinite(l.spm))return; ds+=(ds?"L":"M")+X(l.i)+" "+Yspm(l.spm);});
   el("path",{d:ds,fill:"none",stroke:"#f4a259","stroke-width":2,"stroke-dasharray":"4 3"},s);
+  // hr line (cardiac drift) — only when per-length HR is present
+  const hrs=laps.map(l=>l.hr).filter(isFinite);
+  let Yhr=null;
+  if(hrs.length){
+    Yhr=lin(Math.min(...hrs)-3,Math.max(...hrs)+3,H-P.b,P.t); // higher bpm = up
+    let dh="";laps.forEach(l=>{if(!isFinite(l.hr))return; dh+=(dh?"L":"M")+X(l.i)+" "+Yhr(l.hr);});
+    el("path",{d:dh,fill:"none",stroke:"#e8717a","stroke-width":2},s);
+    el("text",{x:W-P.r+6,y:P.t+8,fill:"#e8717a","font-size":9.5,"text-anchor":"start","font-family":"var(--mono)"},s).textContent="bpm";
+    [Math.min(...hrs),Math.max(...hrs)].forEach(v=>el("text",{x:W-P.r+6,y:Yhr(v)+3,fill:"#e8717a","font-size":9,"text-anchor":"start","font-family":"var(--mono)"},s).textContent=Math.round(v));
+  }
   // dots for hover
   laps.forEach(l=>{if(!isFinite(l.sec))return;
     const c=el("circle",{cx:X(l.i),cy:Ysec(l.sec),r:3,fill:"#8fb8e0",class:"pt"},s);
     c.addEventListener("mousemove",e=>showTip(
       `length <b>${l.i}</b><br>${l.sec.toFixed(0)}s · ${fmtPace(l.sec/swim.pool*100)}/100m<br>`+
-      `${l.strokes} strokes · ${isFinite(l.spm)?l.spm.toFixed(1):"–"} spm · ${isFinite(l.dps)?l.dps.toFixed(2):"–"} m/str`,e));
+      `${l.strokes} strokes · ${isFinite(l.spm)?l.spm.toFixed(1):"–"} spm · ${isFinite(l.dps)?l.dps.toFixed(2):"–"} m/str`+
+      (isFinite(l.hr)?` · ${Math.round(l.hr)} bpm`:""),e));
     c.addEventListener("mouseleave",hideTip);
   });
   el("text",{x:P.l-6,y:P.t+4,fill:"#8fb8e0","font-size":9,"text-anchor":"end","font-family":"var(--mono)"},s).textContent="fast";
@@ -1195,7 +1209,7 @@ function buildLapRows(strokes, workouts) {
   const S = strokes.map(r => ({ ...r, s: parseAppleDate(r.start), e: parseAppleDate(r.end) }))
                    .filter(r => isFinite(r.s))
                    .sort((a, b) => a.s - b.s);
-  const lapRows = [];
+  const lapRows = [], windows = [];   // windows: per-length time spans for the HR pass
   for (const w of W) {
     const laps = S.filter(r => r.s >= w.s && r.s < w.e);
     if (!laps.length) continue;             // open-water / phone-logged swims: no lengths
@@ -1207,40 +1221,100 @@ function buildLapRows(strokes, workouts) {
       const strk = r.value;
       const dps = (pool && strk) ? pool / strk : null;
       const swolf = strk ? secs + strk : null;
-      lapRows.push({
+      const row = {
         workout_start: key, lap_index: idx + 1, lap_count: n,
         pool_length_m: pool != null ? Math.round(pool * 100) / 100 : "",
         seconds: Math.round(secs * 10) / 10, strokes: strk,
         dist_per_stroke_m: dps != null ? Math.round(dps * 1000) / 1000 : "",
         swolf: swolf != null ? Math.round(swolf * 10) / 10 : "",
-        stroke_style: HEALTH_STYLE_NAME[r.style] || r.style || ""
-      });
+        stroke_style: HEALTH_STYLE_NAME[r.style] || r.style || "",
+        hr: ""   // filled by the HR pass (per-sample heart rate within this length's window)
+      };
+      lapRows.push(row);
+      if (r.e > r.s) windows.push({ s: r.s, e: r.e, row, sum: 0, cnt: 0 });
     });
   }
   const summaryRows = W.filter(w => w.dur != null).map(w => ({
     startDate: w.start, duration: w.dur, totalDistance: w.dist,
     avgHeartRate: w.avgHr != null ? w.avgHr : "", maxHeartRate: w.maxHr != null ? w.maxHr : ""
   }));
-  return { lapRows, summaryRows };
+  return { lapRows, summaryRows, windows };
 }
 
-/* Stream a File in ~8 MB chunks with flat memory. onProgress(done,total) drives the
- * progress bar. Returns { lapRows, summaryRows }. */
-async function parseHealthExport(file, onProgress) {
-  const parser = makeHealthParser();
-  const CHUNK = 8 * 1024 * 1024;
-  const dec = new TextDecoder("utf-8");
-  let offset = 0;
-  while (offset < file.size) {
-    const slice = file.slice(offset, Math.min(offset + CHUNK, file.size));
-    const bytes = await slice.arrayBuffer();
-    parser.feed(dec.decode(bytes, { stream: true })); // stream:true handles UTF-8 split across chunks
-    offset += CHUNK;
-    if (onProgress) onProgress(Math.min(offset, file.size), file.size);
+/* Pass 2: stream the per-sample heart-rate Records and average them into each length's window.
+ * Pass 1 only knows the windows once all workouts are seen, so HR is a separate streaming pass.
+ * Accumulates into the window objects (flat memory — no per-sample storage). */
+function makeHRScanner(windows) {
+  const W = windows.slice().sort((a, b) => a.s - b.s);
+  const starts = W.map(w => w.s);
+  const gMin = W.length ? W[0].s : Infinity;
+  const gMax = W.length ? Math.max(...W.map(w => w.e)) : -Infinity;
+  const HR = '"HKQuantityTypeIdentifierHeartRate"';  // exact (excludes HeartRateVariability…)
+  let buf = "";
+  function findWin(t) {
+    if (t < gMin || t >= gMax) return null;
+    let lo = 0, hi = W.length - 1, ans = -1;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (starts[mid] <= t) { ans = mid; lo = mid + 1; } else hi = mid - 1; }
+    return (ans >= 0 && t < W[ans].e) ? W[ans] : null;
   }
-  parser.feed(dec.decode()); // flush any trailing bytes
-  const { strokes, workouts } = parser.finish();
-  return buildLapRows(strokes, workouts);
+  function drain() {
+    let i = 0;
+    for (;;) {
+      const lt = buf.indexOf("<", i); if (lt < 0) { buf = ""; return; }
+      const gt = buf.indexOf(">", lt); if (gt < 0) { buf = buf.slice(lt); return; }
+      if (buf.startsWith("<Record ", lt)) {
+        const selfClose = buf[gt - 1] === "/";
+        let endIdx;
+        if (selfClose) endIdx = gt + 1;
+        else { const close = buf.indexOf("</Record>", gt); if (close < 0) { buf = buf.slice(lt); return; } endIdx = close + 9; }
+        const openTag = buf.slice(lt, gt + 1);
+        if (openTag.indexOf(HR) >= 0) {
+          const sm = openTag.match(/startDate="([^"]*)"/);
+          const vm = openTag.match(/\bvalue="([^"]*)"/);
+          if (sm && vm) {
+            const t = parseAppleDate(sm[1]), v = +vm[1];
+            if (isFinite(t) && isFinite(v)) { const win = findWin(t); if (win) { win.sum += v; win.cnt++; } }
+          }
+        }
+        i = endIdx;
+      } else i = gt + 1;
+      if (i > (1 << 20)) { buf = buf.slice(i); i = 0; }
+    }
+  }
+  return {
+    feed(c) { buf += c; drain(); },
+    finish() { drain(); for (const w of W) if (w.cnt > 0) w.row.hr = Math.round(w.sum / w.cnt); }
+  };
+}
+
+/* Stream a File in ~8 MB chunks with flat memory. Two passes: (1) workouts + strokes -> lap
+ * rows + per-length windows; (2) per-sample heart rate averaged into those windows.
+ * onProgress(done,total) drives the progress bar (pass 1 = first half, pass 2 = second half).
+ * Returns { lapRows, summaryRows, windows }. */
+async function parseHealthExport(file, onProgress) {
+  const CHUNK = 8 * 1024 * 1024;
+  const report = f => { if (onProgress) onProgress(Math.min(f, 1) * file.size, file.size); };
+  async function stream(sink, base, span) {
+    const dec = new TextDecoder("utf-8");
+    let offset = 0;
+    while (offset < file.size) {
+      const bytes = await file.slice(offset, Math.min(offset + CHUNK, file.size)).arrayBuffer();
+      sink.feed(dec.decode(bytes, { stream: true })); // stream:true handles UTF-8 split across chunks
+      offset += CHUNK; report(base + (Math.min(offset, file.size) / file.size) * span);
+    }
+    sink.feed(dec.decode()); // flush any trailing bytes
+  }
+  const p1 = makeHealthParser();
+  await stream(p1, 0, 0.5);
+  const { strokes, workouts } = p1.finish();
+  const result = buildLapRows(strokes, workouts);
+  if (result.windows.length) {
+    const hr = makeHRScanner(result.windows);
+    await stream(hr, 0.5, 0.5);
+    hr.finish();
+  }
+  report(1);
+  return result;
 }
 /* ======================= END health-xml-parser ============================ */
 

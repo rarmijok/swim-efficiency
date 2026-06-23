@@ -27,12 +27,12 @@ function loadParserFromTracker() {
   const html = readFileSync(join(__dirname, "..", "tracker", "swim_tracker.html"), "utf8");
   const m = html.match(/BEGIN health-xml-parser[\s\S]*?\*\/\n([\s\S]*?)\/\* =+ END health-xml-parser/);
   if (!m) throw new Error("could not find the health-xml-parser block in swim_tracker.html");
-  const src = m[1] + "\nmodule.exports={makeHealthParser,buildLapRows};\n";
+  const src = m[1] + "\nmodule.exports={makeHealthParser,buildLapRows,makeHRScanner};\n";
   const tmp = join(tmpdir(), `health_parser_validate_${process.pid}.cjs`);
   writeFileSync(tmp, src);
   return require(tmp);
 }
-const { makeHealthParser, buildLapRows } = loadParserFromTracker();
+const { makeHealthParser, buildLapRows, makeHRScanner } = loadParserFromTracker();
 
 function median(a) {
   const b = a.filter(Number.isFinite).slice().sort((x, y) => x - y);
@@ -50,24 +50,34 @@ function parseCSV(text) {
   });
 }
 
-async function streamParse(path) {
-  const parser = makeHealthParser();
+async function streamFile(path, sink, label) {
   const dec = new TextDecoder("utf-8");
   const stream = createReadStream(path, { highWaterMark: 8 * 1024 * 1024 });
   let bytes = 0, lastLog = 0;
   const total = require("node:fs").statSync(path).size;
   for await (const chunk of stream) {
-    parser.feed(dec.decode(chunk, { stream: true }));
+    sink.feed(dec.decode(chunk, { stream: true }));
     bytes += chunk.length;
     if (bytes - lastLog > 100 * 1024 * 1024) {
       lastLog = bytes;
       const rss = (process.memoryUsage().rss / 1048576).toFixed(0);
-      process.stdout.write(`  …${(bytes / 1048576).toFixed(0)}/${(total / 1048576).toFixed(0)} MB  (RSS ${rss} MB)\n`);
+      process.stdout.write(`  ${label} …${(bytes / 1048576).toFixed(0)}/${(total / 1048576).toFixed(0)} MB  (RSS ${rss} MB)\n`);
     }
   }
-  parser.feed(dec.decode());
+  sink.feed(dec.decode());
+}
+
+async function streamParse(path) {
+  const parser = makeHealthParser();
+  await streamFile(path, parser, "p1");
   const { strokes, workouts } = parser.finish();
-  return buildLapRows(strokes, workouts);
+  const res = buildLapRows(strokes, workouts);
+  if (res.windows.length) {           // pass 2: per-length heart rate
+    const hr = makeHRScanner(res.windows);
+    await streamFile(path, hr, "hr");
+    hr.finish();
+  }
+  return res;
 }
 
 function yearMedians(rows) {
@@ -87,7 +97,7 @@ function yearMedians(rows) {
 }
 
 const EXACT = new Set(["workout_start", "stroke_style", "lap_index", "lap_count", "strokes"]);
-const TOL = { pool_length_m: 0.011, seconds: 0.11, dist_per_stroke_m: 0.0011, swolf: 0.11 };
+const TOL = { pool_length_m: 0.011, seconds: 0.11, dist_per_stroke_m: 0.0011, swolf: 0.11, hr: 1.0 };
 function rowsEqual(py, js, cols) {
   for (const h of cols) {
     const pv = py[h] ?? "", jv = js[h] ?? "";
