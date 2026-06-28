@@ -74,7 +74,15 @@ load the whole file into memory.
 - **cardiac cost** (beats/100m) = `avg_HR/60 * pure-swim pace/100m` — **HR-economy: heartbeats spent
   per 100 m. Lower = fitter/more efficient (faster and/or lower HR), not just "tried harder".** Needs
   `swims.csv` (or the XML path) for HR; gated by the `HASHR` flag like rest% is by `SUMMARY`.
-- **CSS** (Critical Swim Speed) /100m = `(400m TT time − 200m TT time) / 2`
+- **CSS** (Critical Swim Speed) /100m = `(400m TT time − 200m TT time) / 2`. Section 07 surfaces it:
+  until a dedicated time-trial is swum it's **estimated from the two fastest sustained efforts**
+  (`bestEffort` at 400 m and 200 m, so it auto-sharpens when a real all-out 400+200 lands in the
+  export), with an optional manual-TT entry that overrides the estimate. A checkbox **re-anchors the
+  whole target zone to CSS**: `cssTargetZone(css, holdDps)` inverts `speed=(spm/60)·DPS` →
+  `spm = 6000/(pace·DPS)`, flooring length at the recently-built DPS and asking for the rate that
+  swims CSS (+3 spm stretch). `TARGET_SPM`/`TARGET_DPS`/`HOLD_DPS` are now **`let` bindings**
+  (`DEFAULT_*` holds the historical values); `applyCSSTargets()` swaps them and every render reads
+  the live values. **Default is OFF** — the scaffold is dormant until a real TT exists.
 - **tempo set** = a contiguous run (≥2 lengths) within one swim where stroke rate is lifted
   ≥ `max(1.5, 8%)` spm over the swim's **cruise cadence** (median spm of the calmer half of
   lengths). For each set the tracker checks the plan's golden rule — did stroke length **hold**?

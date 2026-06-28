@@ -132,6 +132,27 @@
   select{font-family:var(--mono); font-size:12px; background:#0c2233; color:var(--ink);
     border:1px solid var(--hair); border-radius:8px; padding:7px 10px}
 
+  /* critical swim speed */
+  .cssbig{display:flex; align-items:baseline; gap:8px; margin-bottom:3px}
+  .cssbig .v{font-family:var(--mono); font-size:34px; font-weight:700; color:var(--len); line-height:1}
+  .cssbig .u{font-family:var(--mono); font-size:13px; color:var(--muted)}
+  .cssbig .src{font-family:var(--mono); font-size:9.5px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--faint); border:1px solid var(--hair); border-radius:5px; padding:2px 6px; margin-left:4px}
+  .cssbig .src.meas{color:var(--good); border-color:var(--good)}
+  .cssderiv{font-size:13px; color:var(--muted); margin-top:9px; line-height:1.5}
+  .cssderiv b{color:var(--ink)}
+  .cssrow{display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin-top:16px}
+  .cssrow label{font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--faint); display:flex; align-items:center; gap:8px}
+  .cssrow input{font-family:var(--mono); font-size:13px; color:var(--ink); background:#0c2233;
+    border:1px solid var(--hair); border-radius:8px; padding:6px 9px; width:78px; text-transform:none}
+  button.ghost{font-family:var(--mono); font-size:11px; color:var(--muted); background:transparent;
+    border:1px solid var(--hair); border-radius:8px; padding:6px 11px; cursor:pointer}
+  button.ghost:hover{color:var(--ink); border-color:var(--muted)}
+  .cssapply{display:flex; align-items:center; gap:9px; margin-top:15px; font-size:13px; color:var(--muted); cursor:pointer}
+  .cssapply input{width:15px; height:15px; accent-color:var(--len); cursor:pointer}
+  .cssapply input:disabled{cursor:not-allowed; opacity:.4}
+
   /* compare two periods */
   .cmpbar{display:flex; flex-wrap:wrap; gap:14px 22px; align-items:flex-end; margin-bottom:18px}
   .cmpfield{display:flex; flex-direction:column; gap:6px; font-family:var(--mono);
@@ -336,13 +357,30 @@
     <section class="card">
       <div class="sechead"><span class="n">06</span><h3>Best efforts</h3></div>
       <p class="sub">Fastest stretches of continuous swimming on record (pure pace per 100m).
-        <span id="cssNote"></span></p>
+        These feed your <b style="color:var(--len)">critical swim speed</b> below.</p>
       <div class="efforts" id="efforts"></div>
+    </section>
+
+    <!-- CRITICAL SWIM SPEED -->
+    <section class="card" id="cssCard">
+      <div class="sechead"><span class="n">07</span><h3>Critical swim speed</h3></div>
+      <p class="sub">Your threshold pace — the fastest /100m you can hold for the long haul —
+        from the classic time-trial: <b>CSS = (T<sub>400</sub> − T<sub>200</sub>) / 2</b>. It's the
+        natural anchor for every target here. Until you swim a dedicated TT it's estimated from your
+        two fastest sustained efforts; swim a fresh all-out 400 m then 200 m to sharpen it.</p>
+      <div id="cssBody"></div>
+      <div class="cssrow">
+        <label>400 m time <input id="css400" inputmode="numeric" placeholder="mm:ss"></label>
+        <label>200 m time <input id="css200" inputmode="numeric" placeholder="mm:ss"></label>
+        <button id="cssClear" class="ghost">use best efforts</button>
+      </div>
+      <label class="cssapply"><input type="checkbox" id="cssApply">
+        Re-anchor the tracker's target zone to this CSS</label>
     </section>
 
     <!-- SWIM DETAIL -->
     <section class="card">
-      <div class="sechead"><span class="n">07</span><h3>Inside one swim</h3></div>
+      <div class="sechead"><span class="n">08</span><h3>Inside one swim</h3></div>
       <p class="sub">Length-by-length — pace, stroke rate, and heart rate (when the export has it).
         Watch for <b style="color:var(--hr)">cardiac drift</b>: HR creeping up across the swim tells you
         a slowdown was fatigue; a falling rate or length with flat HR means the stroke broke down.
@@ -361,7 +399,7 @@
 
     <!-- TABLE -->
     <section class="card">
-      <div class="sechead"><span class="n">08</span><h3>Recent swims</h3></div>
+      <div class="sechead"><span class="n">09</span><h3>Recent swims</h3></div>
       <div style="overflow-x:auto"><table id="tbl"></table></div>
     </section>
 
@@ -373,8 +411,12 @@
 <script>
 "use strict";
 /* ---------- constants / targets (from your own data) ---------- */
-const TARGET_SPM=[22,25], TARGET_DPS=[1.75,2.0];  // hold length, raise rate
-const HOLD_DPS=1.79;
+// Target zone. These start as the values from the swimmer's own historical best stretch, but
+// can be RE-ANCHORED to a measured CSS (see the Critical-swim-speed section): applyCSSTargets()
+// reassigns them, every render reads the live values, and DEFAULT_* lets us revert. Hence `let`.
+let TARGET_SPM=[22,25], TARGET_DPS=[1.75,2.0];  // hold length, raise rate
+let HOLD_DPS=1.79;
+const DEFAULT_SPM=[22,25], DEFAULT_DPS=[1.75,2.0], DEFAULT_HOLD=1.79;
 // Recency buckets for the hero scatter — keep these hexes in sync with the legend
 // swatches in the markup. `recVisible` is the set of buckets currently shown; clicking
 // a legend entry toggles its bucket (see setupHeroLegend / renderScatter).
@@ -474,6 +516,37 @@ function detectTempoSets(swim){
       lift:setSpm-cruiseSpm, held:isFinite(cruiseDps)?setDps>=cruiseDps-TEMPO_HOLD:setDps>=HOLD_DPS};
   })};
 }
+// ---- Critical Swim Speed (CSS) -------------------------------------------------------
+// CSS /100m = (T400 − T200) / 2. Until the swimmer logs a dedicated time-trial, estimate it
+// from the two fastest sustained efforts in the data (bestEffort), which auto-sharpens the
+// moment a real all-out 400+200 lands in the export. Returns null until a 400 m run exists.
+function computeCSS(swims){
+  const e4=bestEffort(swims,400), e2=bestEffort(swims,200);
+  if(!e4||!e2) return null;
+  const dM=e4.meters-e2.meters; if(dM<=0) return null;
+  const css=(e4.total-e2.total)/(dM/100);     // per-100 m of the sustainable component
+  if(!(css>30&&css<400)) return null;          // sanity: ignore junk efforts
+  return {css, e4, e2, source:"best"};
+}
+// The length you've actually built lately — anchors the rate the target zone asks for.
+function recentHoldDps(swims){
+  const d=swims.slice(-10).map(s=>s.dps).filter(isFinite);
+  return d.length? med(d): DEFAULT_HOLD;
+}
+// Turn a CSS pace into a stroke-zone via speed = (spm/60)·DPS  ⇒  spm = 6000/(pace·DPS).
+// Floor the length at what you've built; ask for the rate that swims CSS, plus a stretch.
+function cssTargetZone(css, holdDps){
+  const spmLo=Math.round(6000/(css*holdDps)*10)/10;
+  return {spm:[spmLo, +(spmLo+3).toFixed(1)],
+          dps:[+(holdDps-0.04).toFixed(2), +(holdDps+0.21).toFixed(2)], hold:+(+holdDps).toFixed(2)};
+}
+// mm:ss formatter for clock times (efforts/TTs); fmtPace stays for /100m paces.
+function fmtClock(sec){ if(!isFinite(sec))return"–"; sec=Math.round(sec);
+  return Math.floor(sec/60)+":"+String(sec%60).padStart(2,"0"); }
+// Parse "6:40" or a bare seconds count into seconds; NaN if unparseable.
+function parseClock(str){ str=(str||"").trim(); if(!str)return NaN;
+  if(/^\d+(\.\d+)?$/.test(str))return +str;
+  const m=str.match(/^(\d+):(\d{1,2}(\.\d+)?)$/); return m? (+m[1])*60+(+m[2]) : NaN; }
 
 /* ---------- SVG chart utilities ---------- */
 const NS="http://www.w3.org/2000/svg";
@@ -494,6 +567,9 @@ function hideTip(){tip.style.opacity=0;}
 
 /* ---------- state ---------- */
 let SWIMS=[], SUMMARY=null, HASHR=false, CMP_PRESETS=[], OVERVIEW_MODE="days";
+// CSS scaffolding: CSS_DATA is the current estimate/measurement, CSS_MANUAL holds typed TT
+// times (override the estimate), CSS_APPLIED gates whether CSS re-anchors the target zone.
+let CSS_DATA=null, CSS_MANUAL=null, CSS_APPLIED=false;
 const sign=d=>d>0?"+":"";
 
 /* ---------- renderers ---------- */
@@ -840,10 +916,59 @@ function renderEfforts(swims){
       `<div class="t">${b?fmtPace(b.pace):"–"}</div>`+
       `<div class="when">${b?"/100m · "+fmtDate(b.date):"need a longer swim"}</div></div>`;});
   $("#efforts").innerHTML=html;
-  // CSS estimate from best 200 & 400
-  if(got[200]&&got[400]){const css=(got[400].total-got[200].total)/2;
-    $("#cssNote").innerHTML=` Rough CSS estimate ≈ <b style="color:var(--len)">`+fmtPace(css)+
-      `/100m</b> — but for a real number swim a fresh 400m and 200m time-trial back to back.`;}
+}
+
+// Resolve the current CSS: a manually entered TT wins over the best-effort estimate.
+function currentCSS(swims){
+  if(CSS_MANUAL&&isFinite(CSS_MANUAL.t400)&&isFinite(CSS_MANUAL.t200)&&CSS_MANUAL.t400>CSS_MANUAL.t200){
+    return {css:(CSS_MANUAL.t400-CSS_MANUAL.t200)/2,
+            e4:{total:CSS_MANUAL.t400,meters:400}, e2:{total:CSS_MANUAL.t200,meters:200}, source:"manual"};
+  }
+  return computeCSS(swims);
+}
+// Re-anchor TARGET_* to CSS when the toggle is on, else fall back to the historical defaults.
+// Every render reads these live, so flipping the toggle and rebuilding moves the whole tracker.
+function applyCSSTargets(swims){
+  if(CSS_APPLIED && CSS_DATA){
+    const tz=cssTargetZone(CSS_DATA.css, recentHoldDps(swims));
+    TARGET_SPM=tz.spm.slice(); TARGET_DPS=tz.dps.slice(); HOLD_DPS=tz.hold;
+  }else{
+    TARGET_SPM=DEFAULT_SPM.slice(); TARGET_DPS=DEFAULT_DPS.slice(); HOLD_DPS=DEFAULT_HOLD;
+  }
+}
+function renderCSS(swims){
+  CSS_DATA=currentCSS(swims);
+  const body=$("#cssBody"), apply=$("#cssApply");
+  if(!CSS_DATA){
+    body.innerHTML=`<div class="amut">Need a continuous swim of at least 400 m to estimate CSS — `+
+      `or type a measured 400 m and 200 m below.</div>`;
+    apply.checked=false; apply.disabled=true; CSS_APPLIED=false; return;
+  }
+  apply.disabled=false; apply.checked=CSS_APPLIED;
+  const hold=recentHoldDps(swims), tz=cssTargetZone(CSS_DATA.css, hold);
+  const d=CSS_DATA, measured=d.source==="manual";
+  const src=measured
+    ? `from your entered 400 m (<b>${fmtClock(d.e4.total)}</b>) and 200 m (<b>${fmtClock(d.e2.total)}</b>)`
+    : `estimated from your fastest 400 m (<b>${fmtClock(d.e4.total)}</b>, ${fmtDate(d.e4.date)}) `+
+      `and 200 m (<b>${fmtClock(d.e2.total)}</b>, ${fmtDate(d.e2.date)})`;
+  body.innerHTML=
+    `<div class="cssbig"><span class="v">${fmtPace(d.css)}</span><span class="u">/100m</span>`+
+    `<span class="src ${measured?"meas":""}">${measured?"measured":"estimate"}</span></div>`+
+    `<div class="amut">${src}.</div>`+
+    `<div class="cssderiv">Holding your built length <b>${hold.toFixed(2)} m</b>, CSS pace needs `+
+    `<b>${tz.spm[0]} spm</b>. CSS-anchored target zone → <b>${tz.spm[0]}–${tz.spm[1]} spm</b> · `+
+    `<b>≥ ${tz.dps[0]} m/stroke</b>.${CSS_APPLIED?` <span style="color:var(--good)">✓ anchoring the tracker.</span>`:""}</div>`;
+}
+// Wire the CSS controls once (static markup, so listeners survive rebuilds). Each change sets
+// state then rebuilds so the re-anchoring flows everywhere consistently.
+function wireCSS(){
+  const apply=$("#cssApply"), c4=$("#css400"), c2=$("#css200"), clr=$("#cssClear");
+  if(apply.dataset.wired) return; apply.dataset.wired="1";
+  apply.onchange=()=>{ CSS_APPLIED=apply.checked; build(); };
+  const readManual=()=>{ const t4=parseClock(c4.value), t2=parseClock(c2.value);
+    CSS_MANUAL=(isFinite(t4)&&isFinite(t2))?{t400:t4,t200:t2}:null; build(); };
+  c4.onchange=readManual; c2.onchange=readManual;
+  clr.onclick=()=>{ c4.value=""; c2.value=""; CSS_MANUAL=null; build(); };
 }
 
 function renderTable(swims){
@@ -868,7 +993,8 @@ function renderFoot(swims){
     `${swims.length} swims · ${fmtDate(swims[0].date)} → ${fmtDate(swims[swims.length-1].date)}`+
     (poolTxt?` · ${poolTxt}`:"")+`<br>`+
     `Speed = (strokes/min ÷ 60) × distance/stroke. Targets — rate ${TARGET_SPM[0]}–${TARGET_SPM[1]} spm, `+
-    `length ≥ ${HOLD_DPS} m/stroke — come from your own best stretch. Yard pools are converted to metres.<br>`+
+    `length ≥ ${HOLD_DPS} m/stroke — ${CSS_APPLIED?"anchored to your critical swim speed":"come from your own best stretch"}. `+
+    `Yard pools are converted to metres.<br>`+
     `Reads files locally; nothing leaves this device.`;
 }
 
@@ -1150,6 +1276,7 @@ function build(){
   if(SWIMS.length<2){showError("Need at least two swims with lap data to chart trends."); return;}
   $("#empty").style.display="none"; $("#app").style.display="block";
   $("#ovToggle").onclick=e=>{const b=e.target.closest("button"); if(b)applyOverviewMode(b.dataset.m);};
+  wireCSS(); renderCSS(SWIMS); applyCSSTargets(SWIMS);  // resolve CSS + re-anchor before target-dependent renders
   renderVerdict(SWIMS); renderAdherence(SWIMS);
   applyOverviewMode(OVERVIEW_MODE);  // renders the Overview charts AND the KPIs for the selected window
   setupHeroLegend(); renderScatter(SWIMS); renderTrendBalance(SWIMS); renderTrendPace(SWIMS);
