@@ -345,13 +345,17 @@
       <div class="sechead"><span class="n">07</span><h3>Inside one swim</h3></div>
       <p class="sub">Length-by-length — pace, stroke rate, and heart rate (when the export has it).
         Watch for <b style="color:var(--hr)">cardiac drift</b>: HR creeping up across the swim tells you
-        a slowdown was fatigue; a falling rate or length with flat HR means the stroke broke down.</p>
+        a slowdown was fatigue; a falling rate or length with flat HR means the stroke broke down.
+        <b style="color:var(--rate)">Tempo sets</b> — runs where you lifted your rate — are shaded;
+        the plan's golden rule is to hold your stroke length when you do.</p>
       <div style="margin-bottom:12px"><select id="swimSel"></select></div>
+      <div id="tempoVerdict" class="adherence"></div>
       <div id="swimDetail"></div>
       <div class="legend">
         <span><i style="background:var(--pace)"></i>pace / length</span>
         <span><i style="background:var(--rate)"></i>strokes / min</span>
         <span><i style="background:var(--hr)"></i>heart rate</span>
+        <span><i style="background:var(--rate);opacity:.35"></i>tempo set (length held / gave way)</span>
       </div>
     </section>
 
@@ -443,6 +447,32 @@ function bestEffort(swims,meters){
     if(!best||pace<best.pace)best={pace,date:s.date,total:mn,meters:k*s.pool};
   });
   return best;
+}
+// Tempo-set detection — within one swim, find contiguous runs where stroke rate was
+// deliberately lifted above the swim's cruise cadence, then check the plan's golden rule:
+// did stroke length (DPS) hold, or did the stroke count balloon (thrashing)? Cruise is the
+// median rate of the calmer half of lengths, so a swim that's up to ~half tempo still anchors
+// correctly. A set must be sustained (≥2 lengths) so a single fast length isn't mistaken for one.
+const TEMPO_LIFT=1.5;     // min spm over cruise to count a length as tempo (also ≥8% of cruise)
+const TEMPO_HOLD=0.10;    // DPS may dip this far under cruise and still count as "held" (~1 stroke)
+function detectTempoSets(swim){
+  const laps=swim.laps.filter(l=>isFinite(l.spm)&&isFinite(l.dps));
+  if(laps.length<4) return null;
+  const sortedSpm=laps.map(l=>l.spm).slice().sort((a,b)=>a-b);
+  const cruiseSpm=med(sortedSpm.slice(0,Math.max(2,Math.floor(sortedSpm.length/2))));
+  const lift=Math.max(TEMPO_LIFT,cruiseSpm*0.08);
+  const flag=laps.map(l=>l.spm>=cruiseSpm+lift);
+  const cruiseDps=med(laps.filter((l,i)=>!flag[i]).map(l=>l.dps));
+  const sets=[]; let run=null;
+  laps.forEach((l,i)=>{ if(flag[i]){ run=run||{a:i,b:i}; run.b=i; }
+    else if(run){ if(run.b-run.a+1>=2)sets.push(run); run=null; } });
+  if(run&&run.b-run.a+1>=2)sets.push(run);
+  return {cruiseSpm, cruiseDps, sets:sets.map(r=>{
+    const seg=laps.slice(r.a,r.b+1);
+    const setDps=med(seg.map(l=>l.dps)), setSpm=med(seg.map(l=>l.spm));
+    return {from:seg[0].i, to:seg[seg.length-1].i, n:seg.length, spm:setSpm, dps:setDps,
+      lift:setSpm-cruiseSpm, held:isFinite(cruiseDps)?setDps>=cruiseDps-TEMPO_HOLD:setDps>=HOLD_DPS};
+  })};
 }
 
 /* ---------- SVG chart utilities ---------- */
@@ -615,6 +645,32 @@ function renderEconomy(swims){
   if(lh)el("text",{x:W-P.r-2,y:Yh(lh.v)+14,fill:"#88a0b4","font-size":11,"text-anchor":"end","font-family":"var(--mono)"},s).textContent=Math.round(lh.v)+" bpm";
 }
 
+// One-line read on the swim's tempo work: did the prescribed rate-up reps appear, and did
+// stroke length survive them? Green when every set held its length, red when any ballooned.
+function renderTempoVerdict(tempo){
+  const host=$("#tempoVerdict"); if(!host)return;
+  if(!tempo){ host.className=""; host.innerHTML=""; return; }   // too few lengths to judge
+  host.className="adherence";
+  if(!tempo.sets.length){
+    host.innerHTML=`<span class="atag">TEMPO</span><span class="amut">No tempo set detected — `+
+      `steady cadence around ${tempo.cruiseSpm.toFixed(1)} spm. The plan asks for deliberate `+
+      `rate-up reps; none show in this swim.</span>`;
+    return;
+  }
+  const allHeld=tempo.sets.every(z=>z.held);
+  host.classList.add(allHeld?"good":"bad");
+  const parts=tempo.sets.map(z=>{
+    const span=z.from===z.to?`L${z.from}`:`L${z.from}–${z.to}`;
+    const v=z.held ? `length <b>held ${z.dps.toFixed(2)} m</b> ✓`
+                   : `length <b>gave way to ${z.dps.toFixed(2)} m</b> (cruise ${tempo.cruiseDps.toFixed(2)}) — count ballooned`;
+    return `${span}: <b>${z.spm.toFixed(1)} spm</b> (+${z.lift.toFixed(1)} over cruise) · ${v}`;
+  });
+  const ns=tempo.sets.length, noun=ns>1?"sets":"set";
+  const head=allHeld ? `${ns} tempo ${noun} — turnover up, length protected.`
+                     : `${ns} tempo ${noun} — turnover up, but watch the count.`;
+  host.innerHTML=`<span class="atag">TEMPO</span><b>${head}</b><br><span class="amut">${parts.join("<br>")}</span>`;
+}
+
 function renderSwimDetail(swim){
   const host=$("#swimDetail"); host.innerHTML="";
   const W=820,H=300,P={l:48,r:46,t:16,b:30};
@@ -624,6 +680,18 @@ function renderSwimDetail(swim){
   const Ysec=lin(Math.min(...secs)-2,Math.max(...secs)+2,P.t,H-P.b); // lower=up=faster
   const spms=laps.map(l=>l.spm).filter(isFinite);
   const Yspm=lin(Math.min(...spms)-1,Math.max(...spms)+1,H-P.b,P.t);
+  // tempo-set shading — drawn first so the data lines sit on top. A set's outline is
+  // green when stroke length held through it, red when the count ballooned (thrashing).
+  const tempo=detectTempoSets(swim);
+  const half=(laps.length>1?(X(2)-X(1)):24)/2;
+  if(tempo) tempo.sets.forEach(set=>{
+    const x0=Math.max(P.l,X(set.from)-half), x1=Math.min(W-P.r,X(set.to)+half);
+    el("rect",{x:x0,y:P.t,width:x1-x0,height:H-P.b-P.t,fill:"#f4a259","fill-opacity":.09,
+      stroke:set.held?"#6fcf97":"#ec6f6f","stroke-opacity":.55,"stroke-width":1,rx:3},s);
+    el("text",{x:(x0+x1)/2,y:P.t+10,fill:set.held?"#6fcf97":"#ec6f6f","font-size":9,
+      "text-anchor":"middle","font-family":"var(--mono)"},s).textContent="tempo";
+  });
+  renderTempoVerdict(tempo);
   // pace line
   let dp="";laps.forEach(l=>{if(!isFinite(l.sec))return; dp+=(dp?"L":"M")+X(l.i)+" "+Ysec(l.sec);});
   el("path",{d:dp,fill:"none",stroke:"#8fb8e0","stroke-width":2.2},s);

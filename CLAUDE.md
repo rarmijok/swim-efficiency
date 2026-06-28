@@ -75,6 +75,13 @@ load the whole file into memory.
   per 100 m. Lower = fitter/more efficient (faster and/or lower HR), not just "tried harder".** Needs
   `swims.csv` (or the XML path) for HR; gated by the `HASHR` flag like rest% is by `SUMMARY`.
 - **CSS** (Critical Swim Speed) /100m = `(400m TT time − 200m TT time) / 2`
+- **tempo set** = a contiguous run (≥2 lengths) within one swim where stroke rate is lifted
+  ≥ `max(1.5, 8%)` spm over the swim's **cruise cadence** (median spm of the calmer half of
+  lengths). For each set the tracker checks the plan's golden rule — did stroke length **hold**?
+  `held` = set-median DPS ≥ cruise DPS − 0.10 m (≈ one extra stroke). Surfaced in "Inside one
+  swim": shaded bands (green outline = held, red = count ballooned) + a one-line verdict.
+  `detectTempoSets()` is pure (off `swim.laps`); on the current data most swims show none — the
+  honest signal that the prescribed rate-up work isn't happening yet.
 
 ## What the analysis found (the "why" behind the tracker)
 
