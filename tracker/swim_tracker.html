@@ -117,6 +117,9 @@
     font-size:11px; color:var(--muted); margin-top:10px}
   .legend i{display:inline-block; width:11px; height:11px; border-radius:3px;
     margin-right:6px; vertical-align:-1px}
+  .legend .recleg{cursor:pointer; user-select:none; transition:opacity .12s}
+  .legend .recleg:hover{color:var(--ink)}
+  .legend .recleg.off{opacity:.35; text-decoration:line-through}
 
   /* range toggle */
   .toggle{display:inline-flex; background:#0c2233; border:1px solid var(--hair);
@@ -257,14 +260,14 @@
       </div>
       <div class="adherence" id="adherence"></div>
       <div id="scatter"></div>
-      <div class="legend">
-        <span><i style="background:#f4a259"></i>≤1 mo</span>
-        <span><i style="background:#6fcf97"></i>≤3 mo</span>
-        <span><i style="background:#8fb8e0"></i>≤6 mo</span>
-        <span><i style="background:#6b7fa0"></i>≤12 mo</span>
-        <span><i style="background:#46566b"></i>older</span>
+      <div class="legend" id="heroLegend">
+        <span class="recleg" data-rec="1mo"><i style="background:#f4a259"></i>≤1 mo</span>
+        <span class="recleg" data-rec="3mo"><i style="background:#6fcf97"></i>≤3 mo</span>
+        <span class="recleg" data-rec="6mo"><i style="background:#8fb8e0"></i>≤6 mo</span>
+        <span class="recleg" data-rec="12mo"><i style="background:#6b7fa0"></i>≤12 mo</span>
+        <span class="recleg" data-rec="older"><i style="background:#46566b"></i>older</span>
         <span><i style="background:var(--len);opacity:.25"></i>target zone</span>
-        <span style="color:var(--faint)">contour = pace per 100m</span>
+        <span style="color:var(--faint)">contour = pace per 100m · click a swatch to filter</span>
       </div>
     </section>
 
@@ -368,6 +371,13 @@
 /* ---------- constants / targets (from your own data) ---------- */
 const TARGET_SPM=[22,25], TARGET_DPS=[1.75,2.0];  // hold length, raise rate
 const HOLD_DPS=1.79;
+// Recency buckets for the hero scatter — keep these hexes in sync with the legend
+// swatches in the markup. `recVisible` is the set of buckets currently shown; clicking
+// a legend entry toggles its bucket (see setupHeroLegend / renderScatter).
+const REC_ORDER=["1mo","3mo","6mo","12mo","older"];
+const REC_COLOR={"1mo":"#f4a259","3mo":"#6fcf97","6mo":"#8fb8e0","12mo":"#6b7fa0","older":"#46566b"};
+const recBucket=ageDays=> ageDays<=30?"1mo": ageDays<=90?"3mo": ageDays<=180?"6mo": ageDays<=365?"12mo":"older";
+const recVisible=new Set(REC_ORDER);
 const POOL_DEFAULT=25;
 
 /* ---------- helpers ---------- */
@@ -457,6 +467,21 @@ let SWIMS=[], SUMMARY=null, HASHR=false, CMP_PRESETS=[], OVERVIEW_MODE="days";
 const sign=d=>d>0?"+":"";
 
 /* ---------- renderers ---------- */
+// Wire the hero legend swatches as toggles for the recency buckets. Delegated onclick so
+// rebinding on every build() is harmless. At least one bucket stays on (can't hide them all).
+function setupHeroLegend(){
+  const leg=$("#heroLegend"); if(!leg)return;
+  const sync=()=>leg.querySelectorAll(".recleg").forEach(sp=>
+    sp.classList.toggle("off", !recVisible.has(sp.dataset.rec)));
+  sync();
+  leg.onclick=e=>{const sp=e.target.closest(".recleg"); if(!sp)return;
+    const k=sp.dataset.rec;
+    if(recVisible.has(k)){ if(recVisible.size>1) recVisible.delete(k); }
+    else recVisible.add(k);
+    sync(); renderScatter(SWIMS);
+  };
+}
+
 function renderScatter(swims){
   const host=$("#scatter"); host.innerHTML="";
   const W=820,H=440,P={l:54,r:18,t:18,b:46};
@@ -487,16 +512,16 @@ function renderScatter(swims){
   el("rect",{x:X(TARGET_SPM[0]),y:Y(TARGET_DPS[1]),
     width:X(TARGET_SPM[1])-X(TARGET_SPM[0]),height:Y(TARGET_DPS[0])-Y(TARGET_DPS[1]),
     fill:"#46cdbf",opacity:.10,stroke:"#46cdbf","stroke-opacity":.35,"stroke-width":1,rx:4},s);
-  // dots — colored by recency (months since today). Keep these hexes in sync with the
-  // hero legend swatches in the markup.
+  // dots — colored by recency bucket (see REC_* up top). A bucket toggled off in the
+  // legend is hidden here; the axis domain stays fixed so the view doesn't jump.
   const now=Date.now();
-  const recColor=ageDays=> ageDays<=30?"#f4a259": ageDays<=90?"#6fcf97":
-    ageDays<=180?"#8fb8e0": ageDays<=365?"#6b7fa0":"#46566b";
   const n=swims.length;
   swims.forEach((z,i)=>{ if(!isFinite(z.spm)||!isFinite(z.dps))return;
+    const bucket=recBucket((now-z.date.getTime())/864e5);
+    if(!recVisible.has(bucket))return;
     const latest=i===n-1;
     const c=el("circle",{cx:X(z.spm),cy:Y(z.dps),r:latest?7:4.2,
-      fill:recColor((now-z.date.getTime())/864e5),opacity:latest?1:0.82,
+      fill:REC_COLOR[bucket],opacity:latest?1:0.82,
       stroke:latest?"#fff":"none","stroke-width":latest?1.5:0,class:"pt"},s);
     c.addEventListener("mousemove",e=>showTip(
       `<b>${fmtDate(z.date)}</b><br>${Math.round(z.dist)} m · ${fmtPace(z.pace100)}/100m<br>`+
@@ -1059,7 +1084,7 @@ function build(){
   $("#ovToggle").onclick=e=>{const b=e.target.closest("button"); if(b)applyOverviewMode(b.dataset.m);};
   renderVerdict(SWIMS); renderAdherence(SWIMS);
   applyOverviewMode(OVERVIEW_MODE);  // renders the Overview charts AND the KPIs for the selected window
-  renderScatter(SWIMS); renderTrendBalance(SWIMS); renderTrendPace(SWIMS);
+  setupHeroLegend(); renderScatter(SWIMS); renderTrendBalance(SWIMS); renderTrendPace(SWIMS);
   if(HASHR){$("#hrCard").style.display=""; renderEconomy(SWIMS);} else $("#hrCard").style.display="none";
   renderEfforts(SWIMS); fillSelector(SWIMS); renderSwimDetail(SWIMS[SWIMS.length-1]);
   buildCompare(); renderTable(SWIMS); renderFoot(SWIMS);
